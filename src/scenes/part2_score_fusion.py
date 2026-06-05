@@ -9,7 +9,6 @@ Mathematical logic for the SVM hyperplane and margin distance is adapted from
 svm_animation.py (sklearn SVC linear kernel), keeping full academic accuracy.
 """
 
-from __future__ import annotations
 
 import numpy as np
 from manim import *
@@ -171,7 +170,6 @@ class ScoreCombinationScene(Scene):
                 "tick_size": 0.06,
             },
             tips=True,
-            tip_shape=ArrowTriangleTip,
         ).shift(DOWN * 0.25)
 
         x_label = Text(
@@ -203,48 +201,49 @@ class ScoreCombinationScene(Scene):
         """Two floating 1D scores merge into a 2D column vector, then land as a dot."""
 
         # ── Two floating score values ──────────────────────────────────────────
-        s1_val = MathTex(r"s_1 = 0.85", color=CLASS_B_COLOR, font_size=38)
-        s2_val = MathTex(r"s_2 = 0.92", color=CLASS_B_COLOR, font_size=38)
-        s1_val.move_to(UP * 1.4 + LEFT * 2.8)
-        s2_val.move_to(UP * 1.4 + RIGHT * 2.8)
+        # Positioned in screen-space (not axes-space) so they never overlap the Y-axis.
+        # s1 sits in the upper-left quadrant of the screen, s2 in the upper-right.
+        s1_val = MathTex(r"s_1 = 0.85", color=CLASS_B_COLOR, font_size=40)
+        s2_val = MathTex(r"s_2 = 0.92", color=CLASS_B_COLOR, font_size=40)
+        s1_val.move_to(UP * 2.8 + LEFT * 3.5)
+        s2_val.move_to(UP * 2.8 + RIGHT * 3.5)
 
         self.play(
-            FadeIn(s1_val, shift=UP * 0.25),
-            FadeIn(s2_val, shift=UP * 0.25),
-            run_time=0.9,
+            FadeIn(s1_val, shift=UP * 0.3),
+            FadeIn(s2_val, shift=UP * 0.3),
+            run_time=1.2,
         )
-        self.wait(0.4)
+        self.wait(0.8)
 
         # ── Merge into column vector ───────────────────────────────────────────
         score_matrix = Matrix(
             [["0.85"], ["0.92"]],
             left_bracket="[", right_bracket="]",
-            element_to_mobject_config={"font_size": 34, "color": CLASS_B_COLOR},
-        ).move_to(UP * 1.4)
-        prefix = MathTex(r"\mathbf{S} =", color=CLASS_B_COLOR, font_size=38)
-        prefix.next_to(score_matrix, LEFT, buff=0.2)
-        vector_group = VGroup(prefix, score_matrix)
-        vector_group.move_to(UP * 1.5)
+            element_to_mobject_config={"font_size": 36, "color": CLASS_B_COLOR},
+        )
+        prefix = MathTex(r"\mathbf{S} =", color=CLASS_B_COLOR, font_size=40)
+        vector_group = VGroup(prefix, score_matrix).arrange(RIGHT, buff=0.2)
+        vector_group.move_to(UP * 2.8)  # centred at top, safely above the axes
 
         self.play(
             ReplacementTransform(s1_val, score_matrix.get_entries()[0]),
             ReplacementTransform(s2_val, score_matrix.get_entries()[1]),
             FadeIn(score_matrix.get_brackets()),
             FadeIn(prefix),
-            run_time=1.3,
+            run_time=1.5,
         )
-        self.wait(0.4)
+        self.wait(0.7)
 
-        # Brief Flash then shrink the matrix
-        self.play(Flash(score_matrix, color=CLASS_B_COLOR, flash_radius=0.9), run_time=0.5)
-        self.play(vector_group.animate.scale(0.6).to_corner(UL, buff=0.4), run_time=0.7)
-        self.wait(0.2)
+        # Brief Flash then shrink the matrix to a corner badge
+        self.play(Flash(score_matrix, color=CLASS_B_COLOR, flash_radius=0.9), run_time=0.6)
+        self.play(vector_group.animate.scale(0.58).to_corner(UL, buff=0.35), run_time=0.9)
+        self.wait(0.4)
 
         # ── Morph into a dot at (0.85, 0.92) ─────────────────────────────────
         target_pos = axes.c2p(0.85, 0.92)
         sample_dot = Dot(point=target_pos, color=CLASS_B_COLOR, radius=0.12)
 
-        # Connecting dashed guides
+        # Connecting dashed projection guides
         guide_x = DashedLine(
             axes.c2p(0.85, 0.0), axes.c2p(0.85, 0.92),
             color=CLASS_B_COLOR, stroke_opacity=0.45, dash_length=0.08,
@@ -254,31 +253,29 @@ class ScoreCombinationScene(Scene):
             color=CLASS_B_COLOR, stroke_opacity=0.45, dash_length=0.08,
         )
 
-        self.play(
-            Create(guide_x), Create(guide_y),
-            run_time=0.6,
-        )
+        self.play(Create(guide_x), Create(guide_y), run_time=0.9)
         self.play(
             ReplacementTransform(vector_group.copy(), sample_dot),
-            run_time=0.9,
+            run_time=1.1,
         )
-        self.play(Flash(sample_dot, color=WHITE, flash_radius=0.35, num_lines=8), run_time=0.4)
-        self.wait(0.4)
+        self.play(Flash(sample_dot, color=WHITE, flash_radius=0.35, num_lines=8), run_time=0.5)
+        self.wait(0.6)
 
-        # Annotate
+        # Coordinate annotation
         coord_label = MathTex(
             r"(0.85,\ 0.92)", color=CLASS_B_COLOR, font_size=22
-        ).next_to(sample_dot, UR, buff=0.12)
-        self.play(FadeIn(coord_label, shift=UP * 0.15), run_time=0.5)
-        self.wait(0.5)
+        ).next_to(sample_dot, UR, buff=0.14)
+        self.play(FadeIn(coord_label, shift=UP * 0.15), run_time=0.6)
+        self.wait(0.9)
 
-        # Clean up Phase 1 ephemeral objects; keep axes and labels in memory
+        # Clean up Phase 1 ephemeral objects; keep axes and labels alive
         self.play(
             FadeOut(guide_x), FadeOut(guide_y),
             FadeOut(coord_label), FadeOut(sample_dot),
             FadeOut(vector_group),
-            run_time=0.7,
+            run_time=0.9,
         )
+        self.wait(0.3)
 
     # =========================================================================
     # PHASE 2  (0:15 – 0:30)  Breaking Free from 1D
@@ -291,7 +288,6 @@ class ScoreCombinationScene(Scene):
         # ── Overlap crowd on the X-axis (confusion zone from Scene 2) ─────────
         rng_crowd = np.random.default_rng(99)
         crowd_x = rng_crowd.uniform(0.35, 0.65, N_CLOUD * 2)
-        crowd_y = np.zeros(N_CLOUD * 2)
         crowd_cols = (
             [GENUINE_COLOR] * N_CLOUD + [IMPOSTOR_COLOR] * N_CLOUD
         )
@@ -306,14 +302,14 @@ class ScoreCombinationScene(Scene):
                 *[FadeIn(d, scale=0.5) for d in crowd_dots],
                 lag_ratio=0.05,
             ),
-            run_time=1.2,
+            run_time=1.5,
         )
 
         confusion_tag = Text(
             "1D Overlap (Scene 2)", font=FONT, font_size=18, color=SLATE_GRAY
         ).to_edge(UP, buff=0.35)
-        self.play(FadeIn(confusion_tag, shift=DOWN * 0.2), run_time=0.5)
-        self.wait(0.5)
+        self.play(FadeIn(confusion_tag, shift=DOWN * 0.2), run_time=0.7)
+        self.wait(0.9)
 
         # ── Animate expansion into 2D space ────────────────────────────────────
         gen_targets  = _scatter_2d((0.72, 0.75), N_CLOUD, 0.09, RNG_SEED_GEN_2D)
@@ -327,31 +323,37 @@ class ScoreCombinationScene(Scene):
         self.play(
             FadeOut(confusion_tag),
             *expand_anims,
-            run_time=1.8,
+            run_time=2.2,
             rate_func=smooth,
         )
-        self.wait(0.3)
+        self.wait(0.6)
 
         # Split into two named VGroups for later phases
         genuine_cloud  = VGroup(*crowd_dots[:N_CLOUD])
         impostor_cloud = VGroup(*crowd_dots[N_CLOUD:])
 
         # ── Labels for the two clusters ────────────────────────────────────────
-        gen_label = Text(
-            "Genuine  ✓", font=FONT, font_size=19, color=GENUINE_COLOR
-        ).move_to(axes.c2p(0.82, 0.88))
-        imp_label = Text(
-            "Impostor  ✗", font=FONT, font_size=19, color=IMPOSTOR_COLOR
-        ).move_to(axes.c2p(0.18, 0.13))
+        gen_label = Text("Genuine  ✓", font=FONT, font_size=19, color=GENUINE_COLOR)
+        gen_bg = SurroundingRectangle(gen_label, fill_color=BG_COLOR, fill_opacity=0.8, stroke_width=0, buff=0.08)
+        gen_group = VGroup(gen_bg, gen_label).next_to(genuine_cloud, UP, buff=0.15)
 
-        self.play(FadeIn(gen_label, shift=UP * 0.15), FadeIn(imp_label, shift=DOWN * 0.15), run_time=0.7)
-        self.wait(0.7)
-        self.play(FadeOut(gen_label), FadeOut(imp_label), run_time=0.5)
+        imp_label = Text("Impostor  ✗", font=FONT, font_size=19, color=IMPOSTOR_COLOR)
+        imp_bg = SurroundingRectangle(imp_label, fill_color=BG_COLOR, fill_opacity=0.8, stroke_width=0, buff=0.08)
+        imp_group = VGroup(imp_bg, imp_label).next_to(impostor_cloud, DOWN, buff=0.15)
+
+        self.play(
+            FadeIn(gen_group, shift=UP * 0.15),
+            FadeIn(imp_group, shift=DOWN * 0.15),
+            run_time=0.9,
+        )
+        self.wait(1.0)
+        self.play(FadeOut(gen_group), FadeOut(imp_group), run_time=0.7)
+        self.wait(0.3)
 
         return genuine_cloud, impostor_cloud
 
     # =========================================================================
-    # PHASE 3  (0:30 – 0:45)  The Core Idea — Linear SVM & Margins
+    # PHASE 3  (0:30 – 1:00)  Linear SVM — Learning Process + Convergence
     # =========================================================================
     def _phase3_linear_svm(
         self,
@@ -359,7 +361,16 @@ class ScoreCombinationScene(Scene):
         genuine_cloud: VGroup,
         impostor_cloud: VGroup,
     ) -> Line:
-        """Draw the optimal linear SVM boundary, then animate margin expansion."""
+        """Fake-Iteration learning: random start → optimal SVM via ValueTracker lerp.
+
+        Technique adapted from svm_animation.py:
+          - sklearn SVC gives us w_final and b_final (the ground truth).
+          - We define w_start / b_start as deliberately wrong offsets.
+          - A ValueTracker alpha ∈ [0, 1] drives always_redraw() to linearly
+            interpolate (lerp) every visual element from wrong → correct.
+          - This animates the boundary "learning" without re-implementing
+            gradient descent — pure visual interpolation, academically honest.
+        """
 
         # ── Subtitle ──────────────────────────────────────────────────────────
         subtitle = Text(
@@ -372,114 +383,263 @@ class ScoreCombinationScene(Scene):
         self.play(
             FadeIn(subtitle, shift=DOWN * 0.15),
             Create(underline),
-            run_time=0.8,
+            run_time=1.0,
         )
-        self.wait(0.3)
+        self.wait(0.5)
 
-        # ── Recover point coordinates from the moved dots ─────────────────────
-        gen_pts = [
-            axes.p2c(d.get_center())[:2]
-            for d in genuine_cloud
-        ]
-        imp_pts = [
-            axes.p2c(d.get_center())[:2]
-            for d in impostor_cloud
-        ]
+        # ── Recover point coordinates from the animated dots ──────────────────
+        gen_pts = [tuple(axes.p2c(d.get_center())[:2]) for d in genuine_cloud]
+        imp_pts = [tuple(axes.p2c(d.get_center())[:2]) for d in impostor_cloud]
 
-        # ── Fit Linear SVM (from svm_animation.py logic) ──────────────────────
-        slope, y_at_x0, margin_dy, support_vecs = _fit_linear_svm(gen_pts, imp_pts)
+        # ── Fit optimal Linear SVM (sklearn, same as svm_animation.py) ────────
+        X_data = np.array(gen_pts + imp_pts)
+        y_data = np.array([1] * len(gen_pts) + [-1] * len(imp_pts))
+        clf = SVC(kernel="linear", C=1, random_state=42)
+        clf.fit(X_data, y_data)
 
-        # Axis x-range for line construction
+        coef_final = clf.coef_[0].copy()       # [w1, w2]
+        b_final    = clf.intercept_[0]         # scalar b
+        support_vecs = clf.support_vectors_
+
+        # Derived final boundary parameters
+        slope_final  = -coef_final[0] / coef_final[1]
+        y0_final     = -b_final / coef_final[1]
+        norm_final   = np.linalg.norm(coef_final)
+        margin_dy_final = 1.0 / (coef_final[1] * norm_final)  # half-margin in y
+
+        # ── Define a deliberately wrong starting boundary (Epoch 0) ────────────
+        # Offset coefficients so the line starts tilted and shifted away from optimal.
+        coef_start = coef_final + np.array([-1.8,  2.2])
+        b_start    = b_final - 2.5
+        slope_start = -coef_start[0] / coef_start[1]
+        y0_start    = -b_start / coef_start[1]
+        norm_start  = np.linalg.norm(coef_start)
+        margin_dy_start = 1.0 / (coef_start[1] * norm_start)
+
         x_lo, x_hi = AXIS_RANGE[0], AXIS_RANGE[1]
 
-        # ── Draw main hyperplane ───────────────────────────────────────────────
-        hyperplane = _boundary_line(
-            axes, slope, y_at_x0, x_lo, x_hi,
-            color=HYPERPLANE_COLOR, stroke_width=3.5,
-        )
-        self.play(Create(hyperplane), run_time=0.9)
-        self.wait(0.2)
+        # ── ValueTracker: alpha drives the entire lerp (0 = random, 1 = optimal)
+        alpha = ValueTracker(0.0)
 
-        # ── Margin lines (dashed) — start coincident with hyperplane ─────────
-        margin_pos = _boundary_line(
-            axes, slope, y_at_x0, x_lo, x_hi,
-            color=MARGIN_COLOR, stroke_width=2, stroke_opacity=0.8,
-        ).set_style(stroke_width=2)
-        margin_neg = _boundary_line(
-            axes, slope, y_at_x0, x_lo, x_hi,
-            color=MARGIN_COLOR, stroke_width=2, stroke_opacity=0.8,
-        ).set_style(stroke_width=2)
+        # ── Helper: interpolated boundary parameters at current alpha ─────────
+        def _lerp_params():
+            t = alpha.get_value()
+            sl  = slope_start  * (1 - t) + slope_final  * t
+            y0  = y0_start     * (1 - t) + y0_final     * t
+            mdy = margin_dy_start * (1 - t) + margin_dy_final * t
+            return sl, y0, mdy
 
-        # Convert to DashedVMobject after creation
-        margin_pos_dashed = DashedVMobject(margin_pos, num_dashes=22, dashed_ratio=0.55)
-        margin_neg_dashed = DashedVMobject(margin_neg, num_dashes=22, dashed_ratio=0.55)
-        self.add(margin_pos_dashed, margin_neg_dashed)
+        # ── always_redraw: main hyperplane ────────────────────────────────────
+        def _make_hyperplane():
+            sl, y0, _ = _lerp_params()
+            t = alpha.get_value()
+            # Colour shifts from a dim orange-red (wrong) to HYPERPLANE_COLOR (correct)
+            c = interpolate_color(ManimColor("#E87040"), ManimColor(HYPERPLANE_COLOR), t)
+            return Line(
+                axes.c2p(x_lo, sl * x_lo + y0),
+                axes.c2p(x_hi, sl * x_hi + y0),
+                color=c, stroke_width=3.5,
+            )
 
-        # Target positions — shifted by ±margin_dy in y-direction
-        # In Manim coordinates that shift is along axes.c2p(0, margin_dy) - axes.c2p(0, 0)
-        margin_shift_vec = axes.c2p(0.0, abs(margin_dy)) - axes.c2p(0.0, 0.0)
+        # ── always_redraw: positive margin (dashed, above boundary) ───────────
+        def _make_margin_pos():
+            sl, y0, mdy = _lerp_params()
+            t = alpha.get_value()
+            opacity = 0.4 + 0.5 * t  # margin becomes more visible as we converge
+            return DashedLine(
+                axes.c2p(x_lo, sl * x_lo + y0 + abs(mdy)),
+                axes.c2p(x_hi, sl * x_hi + y0 + abs(mdy)),
+                color=MARGIN_COLOR, stroke_width=2,
+                stroke_opacity=opacity, dash_length=0.1,
+            )
 
+        # ── always_redraw: negative margin (dashed, below boundary) ───────────
+        def _make_margin_neg():
+            sl, y0, mdy = _lerp_params()
+            t = alpha.get_value()
+            opacity = 0.4 + 0.5 * t
+            return DashedLine(
+                axes.c2p(x_lo, sl * x_lo + y0 - abs(mdy)),
+                axes.c2p(x_hi, sl * x_hi + y0 - abs(mdy)),
+                color=MARGIN_COLOR, stroke_width=2,
+                stroke_opacity=opacity, dash_length=0.1,
+            )
+
+        # ── always_redraw: shaded margin band ─────────────────────────────────
+        def _make_margin_band():
+            sl, y0, mdy = _lerp_params()
+            t = alpha.get_value()
+            corners = [
+                axes.c2p(x_lo, sl * x_lo + y0 - abs(mdy)),
+                axes.c2p(x_hi, sl * x_hi + y0 - abs(mdy)),
+                axes.c2p(x_hi, sl * x_hi + y0 + abs(mdy)),
+                axes.c2p(x_lo, sl * x_lo + y0 + abs(mdy)),
+            ]
+            return Polygon(
+                *corners,
+                fill_color=HYPERPLANE_COLOR,
+                fill_opacity=0.08 + 0.10 * t,
+                stroke_width=0,
+            )
+
+        # ── Epoch counter (always_redraw text) ─────────────────────────────────
+        # Maps alpha ∈ [0,1] to a fake "iteration" count 0 → N_ITER_DISPLAY
+        N_ITER_DISPLAY = 50
+        def _make_epoch_text():
+            t = alpha.get_value()
+            epoch = int(t * N_ITER_DISPLAY)
+            label = Text(
+                f"Epoch: {epoch:>3} / {N_ITER_DISPLAY}",
+                font=FONT, font_size=18, color=SLATE_GRAY,
+            ).to_corner(DR, buff=0.45)
+            return label
+
+        # ── Create all live objects and add to scene ───────────────────────────
+        margin_band  = always_redraw(_make_margin_band)
+        hyperplane   = always_redraw(_make_hyperplane)
+        margin_pos_d = always_redraw(_make_margin_pos)
+        margin_neg_d = always_redraw(_make_margin_neg)
+        epoch_text   = always_redraw(_make_epoch_text)
+
+        self.add(margin_band, margin_pos_d, margin_neg_d, hyperplane, epoch_text)
+
+        # ── Step 1: Epoch 0 — show the random (wrong) boundary ────────────────
+        epoch0_caption = Text(
+            "Epoch 0 — Ranh giới ngẫu nhiên",
+            font=FONT, font_size=18, color=SLATE_GRAY,
+        ).to_edge(DOWN, buff=0.55)
+        self.play(FadeIn(epoch0_caption, shift=UP * 0.15), run_time=0.8)
+        self.wait(1.2)
+
+        # ── Step 2: Animate learning — alpha 0 → 1 (the core lerp) ───────────
+        # rate_func=smooth gives a natural ease-in / ease-out feel.
+        self.play(FadeOut(epoch0_caption), run_time=0.4)
+
+        converge_caption = Text(
+            "Đang tối ưu hóa lề (Maximising margin)…",
+            font=FONT, font_size=18, color=HYPERPLANE_COLOR,
+        ).to_edge(DOWN, buff=0.55)
+        self.play(FadeIn(converge_caption, shift=UP * 0.1), run_time=0.6)
+
+        # The main learning animation: 4 seconds, smooth easing
         self.play(
-            margin_pos_dashed.animate.shift(margin_shift_vec),
-            margin_neg_dashed.animate.shift(-margin_shift_vec),
-            run_time=1.2,
+            alpha.animate.set_value(1.0),
+            run_time=4.0,
             rate_func=smooth,
         )
-        self.wait(0.3)
+        self.play(FadeOut(converge_caption), run_time=0.4)
+        self.wait(0.5)
 
-        # ── Highlight support vectors ──────────────────────────────────────────
+        # ── Step 3: Convergence — snap, flash, highlight Support Vectors ───────
+        # Remove updaters so the objects are now static at alpha = 1
+        self.remove(margin_band, margin_pos_d, margin_neg_d, hyperplane, epoch_text)
+
+        # Rebuild static final versions (clean, no always_redraw overhead)
+        final_band = Polygon(
+            axes.c2p(x_lo, slope_final * x_lo + y0_final - abs(margin_dy_final)),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final - abs(margin_dy_final)),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final + abs(margin_dy_final)),
+            axes.c2p(x_lo, slope_final * x_lo + y0_final + abs(margin_dy_final)),
+            fill_color=HYPERPLANE_COLOR, fill_opacity=0.18, stroke_width=0,
+        )
+        final_hp = Line(
+            axes.c2p(x_lo, slope_final * x_lo + y0_final),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final),
+            color=HYPERPLANE_COLOR, stroke_width=4,
+        )
+        final_margin_pos = DashedLine(
+            axes.c2p(x_lo, slope_final * x_lo + y0_final + abs(margin_dy_final)),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final + abs(margin_dy_final)),
+            color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1,
+        )
+        final_margin_neg = DashedLine(
+            axes.c2p(x_lo, slope_final * x_lo + y0_final - abs(margin_dy_final)),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final - abs(margin_dy_final)),
+            color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1,
+        )
+
+        self.play(
+            FadeIn(final_band),
+            Create(final_hp),
+            Create(final_margin_pos),
+            Create(final_margin_neg),
+            run_time=0.7,
+        )
+        # Snap flash on the hyperplane
+        self.play(Flash(final_hp.get_center(), color=HYPERPLANE_COLOR, flash_radius=0.5, num_lines=10), run_time=0.5)
+
+        # ── Support Vector rings — glow on convergence ─────────────────────────
         sv_rings = VGroup()
         for sv in support_vecs:
-            sv_pt  = axes.c2p(sv[0], sv[1])
-            ring = Circle(radius=0.18, color=WHITE, stroke_width=2.5).move_to(sv_pt)
+            ring = Circle(
+                radius=0.20, color=WHITE, stroke_width=2.8,
+            ).move_to(axes.c2p(sv[0], sv[1]))
             sv_rings.add(ring)
 
         self.play(
-            LaggedStart(*[Create(r) for r in sv_rings], lag_ratio=0.2),
-            run_time=0.7,
+            LaggedStart(*[
+                AnimationGroup(Create(r), Flash(r.get_center(), color=WHITE, flash_radius=0.25, num_lines=6))
+                for r in sv_rings
+            ], lag_ratio=0.25),
+            run_time=1.2,
         )
 
         sv_badge = Text(
-            "Support Vectors", font=FONT, font_size=20, color=WHITE
-        ).to_edge(DOWN, buff=0.45)
-        sv_arrow = Arrow(
-            sv_badge.get_top(),
-            sv_rings[0].get_center() + DOWN * 0.2,
-            color=WHITE, stroke_width=2,
-            max_tip_length_to_length_ratio=0.18,
+            "Support Vectors — Vector hỗ trợ", font=FONT, font_size=19, color=WHITE
+        ).to_edge(DOWN, buff=0.55)
+        self.play(FadeIn(sv_badge, shift=UP * 0.15), run_time=0.7)
+        self.wait(0.8)
+
+        # ── 2/||w|| margin label ───────────────────────────────────────────────
+        # Thủ thuật "Đường thẳng ảo": Tạo Line liền nét trong bộ nhớ để mượn hàm tính toán
+        calc_line_pos = Line(
+            axes.c2p(x_lo, slope_final * x_lo + y0_final + abs(margin_dy_final)),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final + abs(margin_dy_final))
         )
-        self.play(
-            FadeIn(sv_badge, shift=UP * 0.15),
-            Create(sv_arrow),
-            Flash(sv_rings[0], color=WHITE, flash_radius=0.3, num_lines=6),
-            run_time=0.8,
+        calc_line_neg = Line(
+            axes.c2p(x_lo, slope_final * x_lo + y0_final - abs(margin_dy_final)),
+            axes.c2p(x_hi, slope_final * x_hi + y0_final - abs(margin_dy_final))
         )
-        self.wait(1.0)
+        
+        # Manim có thể thoải mái tính toán trên đường Line liền nét
+        pt_on_pos = calc_line_pos.point_from_proportion(0.65) 
+        pt_on_neg = calc_line_neg.get_projection(pt_on_pos)
+        
+        # Mũi tên 2 đầu đo khoảng cách lề vuông góc
+        margin_arrow = DoubleArrow(
+            pt_on_neg, pt_on_pos, buff=0, 
+            color=MARGIN_COLOR, stroke_width=2.5, tip_length=0.15
+        )
+        margin_text  = MathTex(
+            r"\frac{2}{\|\mathbf{w}\|}", font_size=28, color=MARGIN_COLOR
+        ).next_to(margin_arrow, RIGHT, buff=0.1)
 
-        # ── Margin width label ─────────────────────────────────────────────────
-        mid_x = (x_lo + x_hi) / 2
-        mid_y_hp  = slope * mid_x + y_at_x0
-        brace_start = axes.c2p(mid_x, mid_y_hp)
-        brace_end   = axes.c2p(mid_x, mid_y_hp + abs(margin_dy))
-        margin_brace = BraceBetweenPoints(brace_start, brace_end, direction=RIGHT)
-        margin_text  = MathTex(r"\frac{2}{\|\mathbf{w}\|}", font_size=24, color=MARGIN_COLOR)
-        margin_text.next_to(margin_brace, RIGHT, buff=0.12)
+        # Mũi tên cong chỉ rõ đâu là Support Vector
+        sv_pointer = CurvedArrow(
+            start_point=sv_badge.get_top() + RIGHT * 1.5,
+            end_point=sv_rings[0].get_bottom() + DOWN * 0.05,
+            color=WHITE, angle=-PI/3, stroke_width=2, tip_length=0.15
+        )
 
-        self.play(Create(margin_brace), Write(margin_text), run_time=0.8)
-        self.wait(0.9)
-
-        # ── Clean up Phase 3 overlays before Phase 4 ──────────────────────────
         self.play(
-            FadeOut(sv_badge), FadeOut(sv_arrow),
+            Create(margin_arrow), Write(margin_text), 
+            Create(sv_pointer), run_time=1.0
+        )
+        self.wait(1.2)
+
+        # ── Clean up Phase 3 overlays; pass hyperplane forward to Phase 4 ─────
+        self.play(
+            FadeOut(sv_badge), FadeOut(sv_pointer),
             FadeOut(sv_rings),
-            FadeOut(margin_brace), FadeOut(margin_text),
+            FadeOut(margin_arrow), FadeOut(margin_text),
             FadeOut(subtitle), FadeOut(underline),
-            FadeOut(margin_pos_dashed), FadeOut(margin_neg_dashed),
-            run_time=0.8,
+            FadeOut(final_margin_pos), FadeOut(final_margin_neg),
+            FadeOut(final_band),
+            run_time=1.0,
         )
-        self.wait(0.2)
+        self.wait(0.3)
 
-        return hyperplane  # passed to Phase 4
+        return final_hp  # passed to Phase 4
 
     # =========================================================================
     # PHASE 4  (0:45 – 1:00)  The XOR Spoof Attack Dilemma
