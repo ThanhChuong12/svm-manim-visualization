@@ -328,14 +328,14 @@ class IntroScene(ThreeDScene):
             tips=True,
         ).shift(DOWN * 0.15)
 
-        # TASK 1: Fix Y-axis label clipping by anchoring to LEFT instead of UL
         x_label = Text(
             "Face Match Score", font=FONT_BODY, font_size=16, color=SLATE_GRAY,
         ).next_to(axes_2d.x_axis.get_end(), DR, buff=0.15)
 
+        # Căn lề Y rộng hơn (buff=0.65) để không bị đè lên trục Y
         y_label = Text(
             "Fingerprint Score", font=FONT_BODY, font_size=16, color=SLATE_GRAY,
-        ).rotate(PI / 2).next_to(axes_2d.y_axis, LEFT, buff=0.25).shift(UP * 0.5)
+        ).rotate(PI / 2).next_to(axes_2d.y_axis, LEFT, buff=0.65).shift(UP * 0.5)
 
         # Morph
         face_icon_copy = face_icon.copy()
@@ -387,7 +387,6 @@ class IntroScene(ThreeDScene):
         )
         self.wait(0.5)
 
-        # TASK 2: Fix Hyperplane Centering
         hyperplane_line = Line(
             start=axes_2d.c2p(-4, 0), end=axes_2d.c2p(4, 0),
             color=HYPERPLANE_COLOR, stroke_width=3,
@@ -400,7 +399,6 @@ class IntroScene(ThreeDScene):
 
         def _update_line(line: Line) -> None:
             a = angle_tracker.get_value()
-            # Nội suy tọa độ bằng hàm c2p của chính trục 2D để bám sát tâm
             start_pt = axes_2d.c2p(-4 * np.cos(a), -4 * np.sin(a))
             end_pt   = axes_2d.c2p( 4 * np.cos(a),  4 * np.sin(a))
             line.put_start_and_end_on(start_pt, end_pt)
@@ -477,12 +475,14 @@ class IntroScene(ThreeDScene):
         self.play(FadeOut(trace_lines), run_time=0.5)
         self.wait(0.4)
 
-        # TASK 3: Increase Z-axis label buff to avoid arrow overlap
+        # ── Nâng Z-Axis Label theo tọa độ tuyệt đối 3D ──
         z_label = Text(
             "Quality Score / Kernel Mapping",
             font=FONT_BODY, font_size=13, color=SLATE_GRAY,
         )
-        z_label.next_to(axes3d.z_axis.get_end(), UP, buff=0.45)
+        # Đặt chữ lơ lửng tại z = 2.7 (cao hơn mũi tên z=2.0)
+        z_label.move_to(axes3d.c2p(0, 0, 2.7))
+        
         self.add_fixed_orientation_mobjects(z_label)
         self.play(FadeIn(z_label), run_time=0.7)
 
@@ -621,7 +621,7 @@ class IntroScene(ThreeDScene):
         self.play(FadeIn(item_focus_static, scale=0.8), run_time=0.9)
         self.wait(1.2)
 
-        # TASK 4: Xóa toàn bộ phần mọc trục 1D rối rắm. Chuyển thẳng sang FadeOut to Black
+        # Dọn dẹp màn hình và fade to black gọn gàng
         self.play(
             FadeOut(item_focus_static),
             FadeOut(title_group),
