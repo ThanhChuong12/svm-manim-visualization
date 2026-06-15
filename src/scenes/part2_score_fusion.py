@@ -1,12 +1,13 @@
-"""Scene 3 — Score Combination & Linear SVM.
+"""Scene 3 — Score Combination & Linear SVM (Final Polish V1.0).
 
-Phase 1 (0:00–0:20): Feature extraction split-screen → score vectorisation → dot lands on 2D axes.
-Phase 2 (0:20–0:40): 1D overlap crowd "rescued" into clean 2D separation with camera zoom.
-Phase 3 (0:40–0:55): Linear SVM hyperplane + animated margin expansion + support vectors.
+Phase 1 (0:00–0:20): Feature extraction split-screen → score vector → delayed axes reveal.
+Phase 2 (0:20–0:40): 1D overlap crowd rescued into clean 2D separation with camera zoom.
+Phase 3 (0:40–0:55): Hard-margin SVM + perpendicular margin math + support vectors.
 Phase 4 (0:55–1:10): XOR spoof attack; the linear boundary fails visually.
 
-Uses MovingCameraScene to enable the "Rescue" zoom effect in Phase 2.
-SVM hyperplane fitted via sklearn SVC (linear kernel), then visually interpolated.
+Uses MovingCameraScene for the Phase 2 zoom effect.
+Hard-margin SVM fitted via sklearn SVC (C=1e6), margin computed using perpendicular
+unit vectors for academic precision (adapted from code.py reference).
 """
 
 import numpy as np
@@ -40,7 +41,6 @@ try:
         make_noisy_icon, make_spoof_icon,
     )
 except ImportError:
-    # Minimal fallbacks — icons degrade to simple shapes
     def make_genuine_icon(size=0.6):
         return Circle(radius=size * 0.5, color=GENUINE_COLOR, stroke_width=2)
 
@@ -60,8 +60,10 @@ MARGIN_COLOR    = HYPERPLANE_COLOR
 SPOOF_RED       = "#FF2222"
 AXIS_OPACITY    = 0.55
 AXIS_RANGE      = [0.0, 1.0, 0.25]
+FP_COLOR        = "#AABBFF"           # Fingerprint accent colour
+LASER_CYAN      = "#00FFFF"
 
-# Reproducible random seeds for each cluster
+# Reproducible random seeds
 RNG_SEED_GEN_2D   = 11
 RNG_SEED_IMP_2D   = 17
 RNG_SEED_SPOOF_TL = 29
@@ -71,7 +73,7 @@ N_CLOUD = 18
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Helpers
+# Module-level helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _scatter_2d(
@@ -79,8 +81,8 @@ def _scatter_2d(
     n: int,
     sigma: float,
     seed: int,
-    x_clip: tuple[float, float] = (0.0, 1.0),
-    y_clip: tuple[float, float] = (0.0, 1.0),
+    x_clip: tuple[float, float] = (0.05, 0.95),
+    y_clip: tuple[float, float] = (0.05, 0.95),
 ) -> list[tuple[float, float]]:
     """Return *n* (x, y) score-space points clustered around *center*."""
     rng = np.random.default_rng(seed)
@@ -88,28 +90,6 @@ def _scatter_2d(
     pts[:, 0] = np.clip(pts[:, 0], *x_clip)
     pts[:, 1] = np.clip(pts[:, 1], *y_clip)
     return [(float(x), float(y)) for x, y in pts]
-
-
-def _boundary_line(
-    axes: Axes,
-    slope: float,
-    y_at_x0: float,
-    x_min: float,
-    x_max: float,
-    color: ManimColor,
-    stroke_width: float = 3,
-    stroke_opacity: float = 1.0,
-) -> Line:
-    """Build a Line spanning the visible axis range for a linear boundary."""
-    y_min = slope * x_min + y_at_x0
-    y_max = slope * x_max + y_at_x0
-    return Line(
-        axes.c2p(x_min, y_min),
-        axes.c2p(x_max, y_max),
-        color=color,
-        stroke_width=stroke_width,
-        stroke_opacity=stroke_opacity,
-    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -122,7 +102,7 @@ class ScoreCombinationScene(MovingCameraScene):
     def construct(self):
         self.camera.background_color = BG_COLOR
 
-        # Shared 2D axes (score space 0→1 on both dimensions)
+        # Build axes (not yet added to scene — delayed reveal in Phase 1)
         axes = Axes(
             x_range=AXIS_RANGE,
             y_range=AXIS_RANGE,
@@ -146,71 +126,181 @@ class ScoreCombinationScene(MovingCameraScene):
             "Fingerprint Score  (s₂)", font=FONT, font_size=16, color=SLATE_GRAY,
         ).rotate(PI / 2).next_to(axes.y_axis, LEFT, buff=0.28)
 
-        self.play(FadeIn(axes), FadeIn(x_label), FadeIn(y_label), run_time=1.0)
-
-        self._phase1_vectorization(axes)
+        # Phase orchestration
+        self._phase1_vectorization(axes, x_label, y_label)
         genuine_cloud, impostor_cloud = self._phase2_rescue(axes)
         hyperplane_line = self._phase3_linear_svm(axes, genuine_cloud, impostor_cloud)
         self._phase4_xor_dilemma(axes, genuine_cloud, impostor_cloud, hyperplane_line)
 
-    # =========================================================================
-    # PHASE 1 — Feature Extraction & Score Vectorisation
-    # =========================================================================
-    def _phase1_vectorization(self, axes: Axes) -> None:
-        """Split-screen biometric extraction → matrix → dot on 2D axes."""
+    # ─────────────────────────────────────────────────────────────────────────
+    # SOLID Helpers
+    # ─────────────────────────────────────────────────────────────────────────
 
-        # ── Split-screen panels ───────────────────────────────────────────────
+    def _create_scanner_panel(
+        self,
+        icon_factory,
+        title_text: str,
+        accent_color: str,
+        position: np.ndarray,
+    ) -> tuple[VGroup, VGroup, Text, Rectangle]:
+        """Build one scanner panel: border, icon, title, laser line.
+
+        Returns (panel_bg, icon, title, laser).
+        """
         panel_w, panel_h = 2.8, 2.2
 
-        # Left panel: Face recognition
-        face_panel_bg = RoundedRectangle(
+        panel_bg = RoundedRectangle(
             width=panel_w, height=panel_h, corner_radius=0.12,
-            stroke_color=CLASS_B_COLOR, stroke_width=1.5, stroke_opacity=0.5,
+            stroke_color=accent_color, stroke_width=1.5, stroke_opacity=0.5,
             fill_color=BG_COLOR, fill_opacity=0.9,
-        ).shift(LEFT * 3.2 + UP * 2.4)
+        ).move_to(position)
 
-        face_icon = make_genuine_icon(0.45)
-        face_icon.move_to(face_panel_bg.get_center() + UP * 0.3)
+        icon = icon_factory(0.45)
+        icon.move_to(panel_bg.get_center() + UP * 0.3)
 
-        face_title = Text(
-            "Face Recognition", font=FONT, font_size=13, color=CLASS_B_COLOR,
-        ).next_to(face_panel_bg, UP, buff=0.10)
+        title = Text(
+            title_text, font=FONT, font_size=13, color=accent_color,
+        ).next_to(panel_bg, UP, buff=0.10)
 
-        # Laser scan effect (thin rectangle sweeping down)
-        face_laser = Rectangle(
+        laser = Rectangle(
             width=panel_w * 0.75, height=0.04,
-            fill_color="#00FFFF", fill_opacity=0.8, stroke_width=0,
-        ).move_to(face_panel_bg.get_top() + DOWN * 0.3)
+            fill_color=LASER_CYAN, fill_opacity=0.8, stroke_width=0,
+        ).move_to(panel_bg.get_top() + DOWN * 0.3)
 
-        # Right panel: Fingerprint recognition
-        fp_panel_bg = RoundedRectangle(
-            width=panel_w, height=panel_h, corner_radius=0.12,
-            stroke_color="#AABBFF", stroke_width=1.5, stroke_opacity=0.5,
-            fill_color=BG_COLOR, fill_opacity=0.9,
-        ).shift(RIGHT * 3.2 + UP * 2.4)
+        return panel_bg, icon, title, laser
 
-        fp_icon = make_fingerprint_icon(0.45)
-        fp_icon.move_to(fp_panel_bg.get_center() + UP * 0.3)
+    def _draw_svm_margins(
+        self, axes: Axes, w: np.ndarray, b: float,
+        x_start: float, x_end: float,
+    ) -> tuple[Line, DashedLine, DashedLine, Polygon, float]:
+        """Compute perpendicular margin geometry and build static Manim objects.
 
-        fp_title = Text(
-            "Fingerprint Scan", font=FONT, font_size=13, color="#AABBFF",
-        ).next_to(fp_panel_bg, UP, buff=0.10)
+        Uses the perpendicular unit vector method (adapted from code.py reference)
+        to ensure margin lines pass exactly through support vector centres.
 
-        fp_laser = Rectangle(
-            width=panel_w * 0.75, height=0.04,
-            fill_color="#00FFFF", fill_opacity=0.8, stroke_width=0,
-        ).move_to(fp_panel_bg.get_top() + DOWN * 0.3)
+        Returns (decision_line, margin_pos, margin_neg, margin_band, margin_distance).
+        """
+        # Decision boundary endpoints
+        y_start = (-w[0] * x_start - b) / w[1]
+        y_end   = (-w[0] * x_end   - b) / w[1]
 
-        # Show panels
+        # Margin distance = 1 / ||w||
+        margin_distance = 1.0 / np.linalg.norm(w)
+
+        # Perpendicular unit vector to the boundary direction
+        line_vec = np.array([x_end - x_start, y_end - y_start])
+        line_len = np.linalg.norm(line_vec)
+        perp = np.array([-line_vec[1], line_vec[0]]) / line_len
+
+        # Positive margin (shifted towards genuine cluster)
+        pos_sx = x_start + perp[0] * margin_distance
+        pos_sy = y_start + perp[1] * margin_distance
+        pos_ex = x_end   + perp[0] * margin_distance
+        pos_ey = y_end   + perp[1] * margin_distance
+
+        # Negative margin (shifted towards impostor cluster)
+        neg_sx = x_start - perp[0] * margin_distance
+        neg_sy = y_start - perp[1] * margin_distance
+        neg_ex = x_end   - perp[0] * margin_distance
+        neg_ey = y_end   - perp[1] * margin_distance
+
+        decision_line = Line(
+            axes.c2p(x_start, y_start), axes.c2p(x_end, y_end),
+            color=HYPERPLANE_COLOR, stroke_width=4,
+        )
+        margin_pos = DashedLine(
+            axes.c2p(pos_sx, pos_sy), axes.c2p(pos_ex, pos_ey),
+            color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1,
+        )
+        margin_neg = DashedLine(
+            axes.c2p(neg_sx, neg_sy), axes.c2p(neg_ex, neg_ey),
+            color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1,
+        )
+        margin_band = Polygon(
+            axes.c2p(pos_sx, pos_sy), axes.c2p(pos_ex, pos_ey),
+            axes.c2p(neg_ex, neg_ey), axes.c2p(neg_sx, neg_sy),
+            fill_color=HYPERPLANE_COLOR, fill_opacity=0.15, stroke_width=0,
+        )
+
+        return decision_line, margin_pos, margin_neg, margin_band, margin_distance
+
+    def _highlight_support_vectors(
+        self, axes: Axes, support_vecs: np.ndarray,
+    ) -> VGroup:
+        """Create white rings around support vectors with flash effects."""
+        sv_rings = VGroup()
+        for sv in support_vecs:
+            ring = Circle(
+                radius=0.20, color=WHITE, stroke_width=2.8,
+            ).move_to(axes.c2p(sv[0], sv[1]))
+            sv_rings.add(ring)
+
         self.play(
-            FadeIn(face_panel_bg), FadeIn(fp_panel_bg),
+            LaggedStart(*[
+                AnimationGroup(
+                    Create(r),
+                    Flash(r.get_center(), color=WHITE,
+                          flash_radius=0.25, num_lines=6),
+                )
+                for r in sv_rings
+            ], lag_ratio=0.25),
+            run_time=1.2,
+        )
+        return sv_rings
+
+    def _handle_xor_failure(self) -> VGroup:
+        """Create the failure icon + text at top-left with high-contrast background."""
+        cross_size = 0.35
+        cross = VGroup(
+            Line(UL * cross_size, DR * cross_size, color=SPOOF_RED, stroke_width=5),
+            Line(UR * cross_size, DL * cross_size, color=SPOOF_RED, stroke_width=5),
+        )
+
+        failure_text = Text(
+            "⚠  Tuyến tính thất bại!",
+            font=FONT, font_size=20, weight=BOLD, color=SPOOF_RED,
+        )
+
+        failure_group = VGroup(cross, failure_text).arrange(RIGHT, buff=0.2)
+        failure_bg = SurroundingRectangle(
+            failure_group,
+            fill_color=BLACK, fill_opacity=0.85,
+            stroke_color=SPOOF_RED, stroke_width=2,
+            corner_radius=0.12, buff=0.20,
+        )
+        failure_block = VGroup(failure_bg, failure_group)
+        failure_block.to_corner(UL, buff=0.4)
+
+        self.play(FadeIn(failure_bg), Create(cross), Write(failure_text), run_time=0.8)
+        return failure_block
+
+    # =========================================================================
+    # PHASE 1 — Feature Extraction & Score Vectorisation (Delayed Axes Reveal)
+    # =========================================================================
+    def _phase1_vectorization(
+        self, axes: Axes, x_label: Text, y_label: Text,
+    ) -> None:
+        """Split-screen biometric extraction → matrix → delayed axes reveal + dot landing."""
+
+        # ── Build scanner panels (clean black screen — no axes yet) ───────────
+        face_bg, face_icon, face_title, face_laser = self._create_scanner_panel(
+            make_genuine_icon, "Face Recognition", CLASS_B_COLOR,
+            position=LEFT * 3.2 + UP * 2.4,
+        )
+        fp_bg, fp_icon, fp_title, fp_laser = self._create_scanner_panel(
+            make_fingerprint_icon, "Fingerprint Scan", FP_COLOR,
+            position=RIGHT * 3.2 + UP * 2.4,
+        )
+
+        self.play(
+            FadeIn(face_bg), FadeIn(fp_bg),
             FadeIn(face_title), FadeIn(fp_title),
             GrowFromCenter(face_icon), GrowFromCenter(fp_icon),
             run_time=1.0,
         )
 
-        # Animate laser scans simultaneously
-        scan_dist = panel_h - 0.6
+        # Laser scan animation
+        scan_dist = 2.2 - 0.6  # panel_h - offset
         self.play(
             face_laser.animate.shift(DOWN * scan_dist),
             fp_laser.animate.shift(DOWN * scan_dist),
@@ -219,19 +309,19 @@ class ScoreCombinationScene(MovingCameraScene):
         )
         self.play(FadeOut(face_laser), FadeOut(fp_laser), run_time=0.3)
 
-        # ── Score labels appear beneath panels ────────────────────────────────
+        # ── Score labels beneath panels ───────────────────────────────────────
         s1_val = MathTex(r"s_1 = 0.85", color=CLASS_B_COLOR, font_size=34)
-        s1_val.next_to(face_panel_bg, DOWN, buff=0.18)
+        s1_val.next_to(face_bg, DOWN, buff=0.18)
 
-        s2_val = MathTex(r"s_2 = 0.92", color="#AABBFF", font_size=34)
-        s2_val.next_to(fp_panel_bg, DOWN, buff=0.18)
+        s2_val = MathTex(r"s_2 = 0.92", color=FP_COLOR, font_size=34)
+        s2_val.next_to(fp_bg, DOWN, buff=0.18)
 
         self.play(
             FadeIn(s1_val, shift=UP * 0.2),
             FadeIn(s2_val, shift=UP * 0.2),
             run_time=0.9,
         )
-        self.wait(0.6)
+        self.wait(0.5)
 
         # ── Merge into column vector ──────────────────────────────────────────
         score_matrix = Matrix(
@@ -244,7 +334,7 @@ class ScoreCombinationScene(MovingCameraScene):
         vector_group.move_to(UP * 2.4)
 
         self.play(
-            FadeOut(face_panel_bg), FadeOut(fp_panel_bg),
+            FadeOut(face_bg), FadeOut(fp_bg),
             FadeOut(face_icon), FadeOut(fp_icon),
             FadeOut(face_title), FadeOut(fp_title),
             ReplacementTransform(s1_val, score_matrix.get_entries()[0]),
@@ -253,24 +343,18 @@ class ScoreCombinationScene(MovingCameraScene):
             FadeIn(prefix),
             run_time=1.4,
         )
-        self.wait(0.5)
+        self.wait(0.4)
 
-        # Flash then shrink the matrix to a corner badge
-        self.play(
-            Flash(score_matrix, color=CLASS_B_COLOR, flash_radius=0.9),
-            run_time=0.5,
-        )
-        self.play(
-            vector_group.animate.scale(0.55).to_corner(UL, buff=0.35),
-            run_time=0.8,
-        )
+        # Flash then shrink to corner badge
+        self.play(Flash(score_matrix, color=CLASS_B_COLOR, flash_radius=0.9), run_time=0.5)
+        self.play(vector_group.animate.scale(0.55).to_corner(UL, buff=0.35), run_time=0.8)
         self.wait(0.3)
 
-        # ── Morph into a dot at (0.85, 0.92) with Vector Flash ────────────────
+        # ── Flying dot → DELAYED AXES REVEAL ──────────────────────────────────
         target_pos = axes.c2p(0.85, 0.92)
         sample_dot = Dot(point=target_pos, color=CLASS_B_COLOR, radius=0.12)
 
-        # Projection guides
+        # Projection guides (added with axes)
         guide_x = DashedLine(
             axes.c2p(0.85, 0.0), axes.c2p(0.85, 0.92),
             color=CLASS_B_COLOR, stroke_opacity=0.4, dash_length=0.08,
@@ -279,8 +363,6 @@ class ScoreCombinationScene(MovingCameraScene):
             axes.c2p(0.0, 0.92), axes.c2p(0.85, 0.92),
             color=CLASS_B_COLOR, stroke_opacity=0.4, dash_length=0.08,
         )
-
-        self.play(Create(guide_x), Create(guide_y), run_time=0.8)
 
         # Flying dot with glow trail
         flying_dot = Dot(
@@ -292,9 +374,13 @@ class ScoreCombinationScene(MovingCameraScene):
             dissipating_time=0.6,
         )
         self.add(glow_trail)
+
+        # Axes appear simultaneously as the dot flies in
         self.play(
+            FadeIn(axes), FadeIn(x_label), FadeIn(y_label),
             flying_dot.animate.move_to(target_pos),
-            run_time=1.0, rate_func=smooth,
+            Create(guide_x), Create(guide_y),
+            run_time=1.5, rate_func=smooth,
         )
         self.remove(glow_trail, flying_dot)
         self.add(sample_dot)
@@ -310,7 +396,7 @@ class ScoreCombinationScene(MovingCameraScene):
             r"(0.85,\ 0.92)", color=CLASS_B_COLOR, font_size=22,
         ).next_to(sample_dot, UR, buff=0.14)
         self.play(FadeIn(coord_label, shift=UP * 0.12), run_time=0.5)
-        self.wait(0.7)
+        self.wait(0.6)
 
         # Clean up Phase 1 ephemera
         self.play(
@@ -327,7 +413,7 @@ class ScoreCombinationScene(MovingCameraScene):
     def _phase2_rescue(self, axes: Axes) -> tuple[VGroup, VGroup]:
         """1D overlap crowd → rescue icons → clean 2D separation with camera zoom."""
 
-        # ── 1D overlap crowd on the X-axis ────────────────────────────────────
+        # ── 1D overlap crowd on X-axis ────────────────────────────────────────
         rng_crowd = np.random.default_rng(99)
         crowd_x = rng_crowd.uniform(0.35, 0.65, N_CLOUD * 2)
         crowd_cols = [GENUINE_COLOR] * N_CLOUD + [IMPOSTOR_COLOR] * N_CLOUD
@@ -348,9 +434,9 @@ class ScoreCombinationScene(MovingCameraScene):
             "1D Overlap — Vùng chồng lấn", font=FONT, font_size=18, color=SLATE_GRAY,
         ).to_edge(UP, buff=0.35)
         self.play(FadeIn(confusion_tag, shift=DOWN * 0.15), run_time=0.6)
-        self.wait(0.7)
+        self.wait(0.6)
 
-        # ── Camera zoom in for the rescue sequence ────────────────────────────
+        # ── Camera zoom in ───────────────────────────────────────────────────
         self.play(
             self.camera.frame.animate.set_width(10),
             run_time=1.0, rate_func=smooth,
@@ -358,28 +444,34 @@ class ScoreCombinationScene(MovingCameraScene):
 
         # ── Rescue 1: Noisy Genuine ───────────────────────────────────────────
         noisy_icon = make_noisy_icon(0.35)
-        noisy_start = axes.c2p(0.50, 0.02)
-        noisy_icon.move_to(noisy_start + UP * 0.6)
+        noisy_start_pos = axes.c2p(0.45, 0.08)
+        noisy_icon.move_to(noisy_start_pos + UP * 0.55)
 
+        # FIX: Move label UP to avoid collision with the upward rescue arrow
         noisy_label = Text(
             "Ảnh nhiễu", font=FONT, font_size=12, color="#888888",
-        ).next_to(noisy_icon, DOWN, buff=0.06)
+        ).next_to(noisy_icon, UP, buff=0.1)
 
-        # The noisy genuine has uncertain face score but HIGH fingerprint score
-        noisy_target = axes.c2p(0.50, 0.82)
-
-        rescue_arrow_g = Arrow(
-            noisy_start + UP * 0.15, noisy_target + DOWN * 0.15,
-            color=GENUINE_COLOR, stroke_width=2, stroke_opacity=0.6,
-            max_tip_length_to_length_ratio=0.12,
-        )
+        # High fingerprint score → escapes confusion zone
+        noisy_target_pos = axes.c2p(0.45, 0.82)
+        noisy_target_center = noisy_target_pos + UP * 0.55
 
         self.play(GrowFromCenter(noisy_icon), FadeIn(noisy_label), run_time=0.7)
         self.wait(0.3)
 
+        # FIX: Arrow starts above axis, ends exactly at the BOTTOM of the icon
+        rescue_arrow_g = Arrow(
+            noisy_start_pos + UP * 0.20,
+            noisy_target_center + DOWN * 0.40,
+            color=GENUINE_COLOR, stroke_width=2, stroke_opacity=0.6,
+            buff=0.1, max_tip_length_to_length_ratio=0.12,
+        )
+
         self.play(
-            noisy_icon.animate.move_to(noisy_target + UP * 0.6),
-            noisy_label.animate.move_to(noisy_target + UP * 1.1),
+            noisy_icon.animate.move_to(noisy_target_center),
+            noisy_label.animate.next_to(
+                Dot(noisy_target_center), UP, buff=0.1,
+            ),
             Create(rescue_arrow_g),
             run_time=1.4, rate_func=smooth,
         )
@@ -388,40 +480,49 @@ class ScoreCombinationScene(MovingCameraScene):
             "✓ Thoát vùng nhiễu!", font=FONT, font_size=13, color=GENUINE_COLOR,
         ).next_to(noisy_icon, RIGHT, buff=0.15)
         self.play(FadeIn(rescue_text_g, shift=LEFT * 0.1), run_time=0.5)
-        self.wait(0.5)
+        self.wait(0.4)
 
         # ── Rescue 2: Spoof Impostor ──────────────────────────────────────────
         spoof_icon = make_spoof_icon(0.30)
-        spoof_start = axes.c2p(0.55, 0.02)
-        spoof_icon.move_to(spoof_start + UP * 0.6)
+        spoof_start_pos = axes.c2p(0.60, 0.25)
+        spoof_icon.move_to(spoof_start_pos + UP * 0.5)
 
+        # FIX: Safe to keep label DOWN since the arrow comes from ABOVE
         spoof_label = Text(
             "Spoof", font=FONT, font_size=12, color=IMPOSTOR_COLOR,
-        ).next_to(spoof_icon, DOWN, buff=0.06)
+        ).next_to(spoof_icon, DOWN, buff=0.1)
 
-        # High face score but LOW fingerprint → plummets
-        spoof_target_high = axes.c2p(0.78, 0.55)
-        spoof_target_low = axes.c2p(0.78, 0.15)
+        # High face score, but LOW fingerprint → plummets
+        spoof_mid_pos = axes.c2p(0.78, 0.55)
+        spoof_mid_center = spoof_mid_pos + UP * 0.45
+        
+        spoof_final_pos = axes.c2p(0.78, 0.18)
+        spoof_final_center = spoof_final_pos + UP * 0.45
 
         self.play(GrowFromCenter(spoof_icon), FadeIn(spoof_label), run_time=0.7)
         self.wait(0.3)
 
-        # First lift (high face score)
+        # Lift (high face score)
         self.play(
-            spoof_icon.animate.move_to(spoof_target_high + UP * 0.5),
-            spoof_label.animate.move_to(spoof_target_high + UP * 1.0),
+            spoof_icon.animate.move_to(spoof_mid_center),
+            spoof_label.animate.next_to(
+                Dot(spoof_mid_center), DOWN, buff=0.1,
+            ),
             run_time=0.8, rate_func=smooth,
         )
 
-        # Then plummet (low fingerprint)
+        # FIX: Arrow points from mid-air to exactly the TOP of the final icon position
         rescue_arrow_s = Arrow(
-            spoof_target_high + DOWN * 0.1, spoof_target_low + UP * 0.15,
+            spoof_mid_center + DOWN * 0.2,
+            spoof_final_center + UP * 0.45,
             color=IMPOSTOR_COLOR, stroke_width=2, stroke_opacity=0.6,
-            max_tip_length_to_length_ratio=0.12,
+            buff=0.1, max_tip_length_to_length_ratio=0.12,
         )
         self.play(
-            spoof_icon.animate.move_to(spoof_target_low + UP * 0.5),
-            spoof_label.animate.move_to(spoof_target_low + UP * 1.0),
+            spoof_icon.animate.move_to(spoof_final_center),
+            spoof_label.animate.next_to(
+                Dot(spoof_final_center), DOWN, buff=0.1,
+            ),
             Create(rescue_arrow_s),
             run_time=1.2, rate_func=rush_into,
         )
@@ -430,9 +531,9 @@ class ScoreCombinationScene(MovingCameraScene):
             "✗ Lộ diện kẻ giả mạo!", font=FONT, font_size=13, color=IMPOSTOR_COLOR,
         ).next_to(spoof_icon, RIGHT, buff=0.15)
         self.play(FadeIn(rescue_text_s, shift=LEFT * 0.1), run_time=0.5)
-        self.wait(0.6)
+        self.wait(0.5)
 
-        # ── Camera zoom out for full 2D view ──────────────────────────────────
+        # ── Camera zoom out + clean rescue visuals ────────────────────────────
         self.play(
             FadeOut(noisy_icon), FadeOut(noisy_label), FadeOut(rescue_text_g),
             FadeOut(rescue_arrow_g),
@@ -458,24 +559,24 @@ class ScoreCombinationScene(MovingCameraScene):
         genuine_cloud = VGroup(*crowd_dots[:N_CLOUD])
         impostor_cloud = VGroup(*crowd_dots[N_CLOUD:])
 
-        # Cluster labels
+        # V-formation cluster labels (Genuine top-right, Impostor top-left)
         gen_label = Text("Genuine  ✓", font=FONT, font_size=19, color=GENUINE_COLOR)
         gen_bg = SurroundingRectangle(
             gen_label, fill_color=BG_COLOR, fill_opacity=0.8,
             stroke_width=0, buff=0.08,
         )
-        gen_group = VGroup(gen_bg, gen_label).next_to(genuine_cloud, UP, buff=0.15)
+        gen_group = VGroup(gen_bg, gen_label).next_to(genuine_cloud, UR, buff=0.12)
 
         imp_label = Text("Impostor  ✗", font=FONT, font_size=19, color=IMPOSTOR_COLOR)
         imp_bg = SurroundingRectangle(
             imp_label, fill_color=BG_COLOR, fill_opacity=0.8,
             stroke_width=0, buff=0.08,
         )
-        imp_group = VGroup(imp_bg, imp_label).next_to(impostor_cloud, DOWN, buff=0.15)
+        imp_group = VGroup(imp_bg, imp_label).next_to(impostor_cloud, UL, buff=0.12)
 
         self.play(
-            FadeIn(gen_group, shift=UP * 0.12),
-            FadeIn(imp_group, shift=DOWN * 0.12),
+            FadeIn(gen_group, shift=DOWN * 0.1),
+            FadeIn(imp_group, shift=DOWN * 0.1),
             run_time=0.8,
         )
         self.wait(0.8)
@@ -483,7 +584,6 @@ class ScoreCombinationScene(MovingCameraScene):
         self.wait(0.3)
 
         return genuine_cloud, impostor_cloud
-
     # =========================================================================
     # PHASE 3 — Linear SVM: Learning Process & Convergence
     # =========================================================================
@@ -493,16 +593,17 @@ class ScoreCombinationScene(MovingCameraScene):
         genuine_cloud: VGroup,
         impostor_cloud: VGroup,
     ) -> Line:
-        """ValueTracker lerp: random boundary → sklearn-optimal SVM via fake iteration."""
+        """ValueTracker lerp: random boundary → Hard-Margin SVM via fake iteration."""
 
         # Subtitle
         subtitle = Text(
             "Linear Support Vector Machine",
             font=FONT, font_size=24, color=HYPERPLANE_COLOR,
         ).to_edge(UP, buff=0.32)
+        # Sửa lỗi depreciation cho set_width()
         underline = Line(
             LEFT, RIGHT, color=HYPERPLANE_COLOR, stroke_width=1.5,
-        ).set_width(subtitle.width).next_to(subtitle, DOWN, buff=0.06)
+        ).set(width=subtitle.width).next_to(subtitle, DOWN, buff=0.06)
         self.play(
             FadeIn(subtitle, shift=DOWN * 0.15),
             Create(underline),
@@ -510,49 +611,51 @@ class ScoreCombinationScene(MovingCameraScene):
         )
         self.wait(0.4)
 
-        # ── Recover point coordinates from animated dots ──────────────────────
+        # ── Extract point coordinates ─────────────────────────────────────────
         gen_pts = [tuple(axes.p2c(d.get_center())[:2]) for d in genuine_cloud]
         imp_pts = [tuple(axes.p2c(d.get_center())[:2]) for d in impostor_cloud]
 
-        # ── Fit optimal Linear SVM (sklearn) ──────────────────────────────────
+        # ── Hard-Margin SVM (C=1e6 forces exact fit through SVs) ──────────────
         X_data = np.array(gen_pts + imp_pts)
         y_data = np.array([1] * len(gen_pts) + [-1] * len(imp_pts))
-        clf = SVC(kernel="linear", C=1, random_state=42)
+        clf = SVC(kernel="linear", C=1e6, random_state=42)
         clf.fit(X_data, y_data)
 
-        coef_final = clf.coef_[0].copy()
+        w_final = clf.coef_[0].copy()
         b_final = clf.intercept_[0]
         support_vecs = clf.support_vectors_
 
-        slope_final = -coef_final[0] / coef_final[1]
-        y0_final = -b_final / coef_final[1]
-        norm_final = np.linalg.norm(coef_final)
-        margin_dy_final = 1.0 / (coef_final[1] * norm_final)
+        # Final boundary parameters for lerp target
+        slope_final = -w_final[0] / w_final[1]
+        y0_final = -b_final / w_final[1]
 
-        # ── Deliberately wrong starting boundary (Epoch 0) ────────────────────
-        coef_start = coef_final + np.array([-1.8, 2.2])
+        # Starting (wrong) boundary for lerp origin
+        w_start = w_final + np.array([-1.8, 2.2])
         b_start = b_final - 2.5
-        slope_start = -coef_start[0] / coef_start[1]
-        y0_start = -b_start / coef_start[1]
-        norm_start = np.linalg.norm(coef_start)
-        margin_dy_start = 1.0 / (coef_start[1] * norm_start)
+        slope_start = -w_start[0] / w_start[1]
+        y0_start = -b_start / w_start[1]
+
+        # Margin distances for lerp
+        margin_dist_final = 1.0 / np.linalg.norm(w_final)
+        margin_dist_start = 1.0 / np.linalg.norm(w_start)
 
         x_lo, x_hi = AXIS_RANGE[0], AXIS_RANGE[1]
 
-        # ValueTracker drives the entire lerp
+        # ValueTracker drives the lerp (0 = random, 1 = optimal)
         alpha = ValueTracker(0.0)
 
-        def _lerp_params():
+        def _lerp_boundary():
+            """Interpolated boundary and margin parameters at current alpha."""
             t = alpha.get_value()
-            sl = slope_start * (1 - t) + slope_final * t
-            y0 = y0_start * (1 - t) + y0_final * t
-            mdy = margin_dy_start * (1 - t) + margin_dy_final * t
-            return sl, y0, mdy
+            w_t = w_start * (1 - t) + w_final * t
+            b_t = b_start * (1 - t) + b_final * t
+            sl = -w_t[0] / w_t[1]
+            y0 = -b_t / w_t[1]
+            md = 1.0 / max(np.linalg.norm(w_t), 1e-6)
+            return sl, y0, w_t, b_t, md, t
 
-        # Hyperplane (colour shifts from dim orange-red to yellow)
         def _make_hyperplane():
-            sl, y0, _ = _lerp_params()
-            t = alpha.get_value()
+            sl, y0, _, _, _, t = _lerp_boundary()
             c = interpolate_color(ManimColor("#E87040"), ManimColor(HYPERPLANE_COLOR), t)
             return Line(
                 axes.c2p(x_lo, sl * x_lo + y0),
@@ -560,46 +663,38 @@ class ScoreCombinationScene(MovingCameraScene):
                 color=c, stroke_width=3.5,
             )
 
-        # Positive margin (above boundary)
-        def _make_margin_pos():
-            sl, y0, mdy = _lerp_params()
-            t = alpha.get_value()
+        def _make_margin_line(sign: float):
+            """Build a dashed margin line (sign=+1 for positive, -1 for negative)."""
+            sl, y0, w_t, b_t, md, t = _lerp_boundary()
+            y_s = sl * x_lo + y0
+            y_e = sl * x_hi + y0
+            line_vec = np.array([x_hi - x_lo, y_e - y_s])
+            line_len = max(np.linalg.norm(line_vec), 1e-6)
+            perp = np.array([-line_vec[1], line_vec[0]]) / line_len
             return DashedLine(
-                axes.c2p(x_lo, sl * x_lo + y0 + abs(mdy)),
-                axes.c2p(x_hi, sl * x_hi + y0 + abs(mdy)),
+                axes.c2p(x_lo + sign * perp[0] * md, y_s + sign * perp[1] * md),
+                axes.c2p(x_hi + sign * perp[0] * md, y_e + sign * perp[1] * md),
                 color=MARGIN_COLOR, stroke_width=2,
                 stroke_opacity=0.4 + 0.5 * t, dash_length=0.1,
             )
 
-        # Negative margin (below boundary)
-        def _make_margin_neg():
-            sl, y0, mdy = _lerp_params()
-            t = alpha.get_value()
-            return DashedLine(
-                axes.c2p(x_lo, sl * x_lo + y0 - abs(mdy)),
-                axes.c2p(x_hi, sl * x_hi + y0 - abs(mdy)),
-                color=MARGIN_COLOR, stroke_width=2,
-                stroke_opacity=0.4 + 0.5 * t, dash_length=0.1,
-            )
-
-        # Shaded margin band with subtle shimmer
         def _make_margin_band():
-            sl, y0, mdy = _lerp_params()
-            t = alpha.get_value()
-            corners = [
-                axes.c2p(x_lo, sl * x_lo + y0 - abs(mdy)),
-                axes.c2p(x_hi, sl * x_hi + y0 - abs(mdy)),
-                axes.c2p(x_hi, sl * x_hi + y0 + abs(mdy)),
-                axes.c2p(x_lo, sl * x_lo + y0 + abs(mdy)),
-            ]
+            sl, y0, w_t, b_t, md, t = _lerp_boundary()
+            y_s = sl * x_lo + y0
+            y_e = sl * x_hi + y0
+            line_vec = np.array([x_hi - x_lo, y_e - y_s])
+            line_len = max(np.linalg.norm(line_vec), 1e-6)
+            perp = np.array([-line_vec[1], line_vec[0]]) / line_len
             return Polygon(
-                *corners,
+                axes.c2p(x_lo + perp[0] * md, y_s + perp[1] * md),
+                axes.c2p(x_hi + perp[0] * md, y_e + perp[1] * md),
+                axes.c2p(x_hi - perp[0] * md, y_e - perp[1] * md),
+                axes.c2p(x_lo - perp[0] * md, y_s - perp[1] * md),
                 fill_color=HYPERPLANE_COLOR,
-                fill_opacity=0.08 + 0.10 * t,
+                fill_opacity=0.06 + 0.12 * t,
                 stroke_width=0,
             )
 
-        # Epoch counter
         N_ITER_DISPLAY = 50
 
         def _make_epoch_text():
@@ -610,71 +705,45 @@ class ScoreCombinationScene(MovingCameraScene):
                 font=FONT, font_size=18, color=SLATE_GRAY,
             ).to_corner(DR, buff=0.45)
 
-        # Create live redraw objects
+        # Live objects
         margin_band = always_redraw(_make_margin_band)
         hyperplane = always_redraw(_make_hyperplane)
-        margin_pos_d = always_redraw(_make_margin_pos)
-        margin_neg_d = always_redraw(_make_margin_neg)
+        margin_pos = always_redraw(lambda: _make_margin_line(+1))
+        margin_neg = always_redraw(lambda: _make_margin_line(-1))
         epoch_text = always_redraw(_make_epoch_text)
 
-        self.add(margin_band, margin_pos_d, margin_neg_d, hyperplane, epoch_text)
+        self.add(margin_band, margin_pos, margin_neg, hyperplane, epoch_text)
 
-        # ── Epoch 0 — random (wrong) boundary ────────────────────────────────
-        epoch0_caption = Text(
+        # Epoch 0 caption
+        epoch0_cap = Text(
             "Epoch 0 — Ranh giới ngẫu nhiên",
             font=FONT, font_size=18, color=SLATE_GRAY,
         ).to_edge(DOWN, buff=0.55)
-        self.play(FadeIn(epoch0_caption, shift=UP * 0.12), run_time=0.7)
+        self.play(FadeIn(epoch0_cap, shift=UP * 0.12), run_time=0.7)
         self.wait(1.0)
 
-        # ── Learning animation: alpha 0 → 1 ──────────────────────────────────
-        self.play(FadeOut(epoch0_caption), run_time=0.3)
-
-        converge_caption = Text(
+        # Learning animation
+        self.play(FadeOut(epoch0_cap), run_time=0.3)
+        converge_cap = Text(
             "Đang tối ưu hóa lề (Maximising margin)…",
             font=FONT, font_size=18, color=HYPERPLANE_COLOR,
         ).to_edge(DOWN, buff=0.55)
-        self.play(FadeIn(converge_caption, shift=UP * 0.1), run_time=0.5)
+        self.play(FadeIn(converge_cap, shift=UP * 0.1), run_time=0.5)
 
-        # Core lerp animation
-        self.play(
-            alpha.animate.set_value(1.0),
-            run_time=4.0, rate_func=smooth,
-        )
-        self.play(FadeOut(converge_caption), run_time=0.3)
+        self.play(alpha.animate.set_value(1.0), run_time=4.0, rate_func=smooth)
+        self.play(FadeOut(converge_cap), run_time=0.3)
         self.wait(0.4)
 
-        # ── Convergence: replace live objects with static finals ───────────────
-        self.remove(margin_band, margin_pos_d, margin_neg_d, hyperplane, epoch_text)
+        # ── Replace live objects with static finals (perpendicular math) ──────
+        self.remove(margin_band, margin_pos, margin_neg, hyperplane, epoch_text)
 
-        final_band = Polygon(
-            axes.c2p(x_lo, slope_final * x_lo + y0_final - abs(margin_dy_final)),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final - abs(margin_dy_final)),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final + abs(margin_dy_final)),
-            axes.c2p(x_lo, slope_final * x_lo + y0_final + abs(margin_dy_final)),
-            fill_color=HYPERPLANE_COLOR, fill_opacity=0.18, stroke_width=0,
-        )
-        final_hp = Line(
-            axes.c2p(x_lo, slope_final * x_lo + y0_final),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final),
-            color=HYPERPLANE_COLOR, stroke_width=4,
-        )
-        final_margin_pos = DashedLine(
-            axes.c2p(x_lo, slope_final * x_lo + y0_final + abs(margin_dy_final)),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final + abs(margin_dy_final)),
-            color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1,
-        )
-        final_margin_neg = DashedLine(
-            axes.c2p(x_lo, slope_final * x_lo + y0_final - abs(margin_dy_final)),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final - abs(margin_dy_final)),
-            color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1,
+        final_hp, final_mp, final_mn, final_band, margin_dist = (
+            self._draw_svm_margins(axes, w_final, b_final, x_lo, x_hi)
         )
 
         self.play(
-            FadeIn(final_band),
-            Create(final_hp),
-            Create(final_margin_pos),
-            Create(final_margin_neg),
+            FadeIn(final_band), Create(final_hp),
+            Create(final_mp), Create(final_mn),
             run_time=0.7,
         )
         self.play(
@@ -683,62 +752,49 @@ class ScoreCombinationScene(MovingCameraScene):
             run_time=0.5,
         )
 
-        # ── Support Vector rings ──────────────────────────────────────────────
-        sv_rings = VGroup()
-        for sv in support_vecs:
-            ring = Circle(
-                radius=0.20, color=WHITE, stroke_width=2.8,
-            ).move_to(axes.c2p(sv[0], sv[1]))
-            sv_rings.add(ring)
-
-        self.play(
-            LaggedStart(*[
-                AnimationGroup(
-                    Create(r),
-                    Flash(r.get_center(), color=WHITE,
-                          flash_radius=0.25, num_lines=6),
-                )
-                for r in sv_rings
-            ], lag_ratio=0.25),
-            run_time=1.2,
-        )
+        # ── Support Vectors ───────────────────────────────────────────────────
+        sv_rings = self._highlight_support_vectors(axes, support_vecs)
 
         sv_badge = Text(
-            "Support Vectors — Vector hỗ trợ",
-            font=FONT, font_size=19, color=WHITE,
-        ).to_edge(DOWN, buff=0.55)
-        self.play(
-            FadeIn(sv_badge, shift=UP * 0.15),
-            run_time=0.7,
+            "Support Vectors", font=FONT, font_size=19, color=WHITE,
         )
-        self.wait(0.6)
+        sv_badge_bg = SurroundingRectangle(
+            sv_badge, fill_color=BG_COLOR, fill_opacity=0.8,
+            stroke_width=0, buff=0.08,
+        )
+        sv_badge_group = VGroup(sv_badge_bg, sv_badge)
+        sv_badge_group.next_to(axes, RIGHT, buff=0.4).shift(DOWN * 0.8)
 
-        # ── 2/||w|| margin label ──────────────────────────────────────────────
-        # Invisible solid lines to leverage Manim's projection math
-        calc_line_pos = Line(
-            axes.c2p(x_lo, slope_final * x_lo + y0_final + abs(margin_dy_final)),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final + abs(margin_dy_final)),
-        )
-        calc_line_neg = Line(
-            axes.c2p(x_lo, slope_final * x_lo + y0_final - abs(margin_dy_final)),
-            axes.c2p(x_hi, slope_final * x_hi + y0_final - abs(margin_dy_final)),
-        )
+        self.play(FadeIn(sv_badge_group, shift=LEFT * 0.15), run_time=0.7)
+        self.wait(0.5)
 
-        pt_on_pos = calc_line_pos.point_from_proportion(0.65)
-        pt_on_neg = calc_line_neg.get_projection(pt_on_pos)
+        # ── Margin annotation (right side of graph) ───────────────────────────
+        meas_x = x_lo + 0.75 * (x_hi - x_lo)
+        meas_y = (-w_final[0] * meas_x - b_final) / w_final[1]
+
+        line_vec = np.array([x_hi - x_lo,
+                             (-w_final[0] * x_hi - b_final) / w_final[1]
+                             - (-w_final[0] * x_lo - b_final) / w_final[1]])
+        line_len = np.linalg.norm(line_vec)
+        perp = np.array([-line_vec[1], line_vec[0]]) / line_len
+
+        pt_pos = axes.c2p(meas_x + perp[0] * margin_dist,
+                          meas_y + perp[1] * margin_dist)
+        pt_neg = axes.c2p(meas_x - perp[0] * margin_dist,
+                          meas_y - perp[1] * margin_dist)
 
         margin_arrow = DoubleArrow(
-            pt_on_neg, pt_on_pos, buff=0,
-            color=MARGIN_COLOR, stroke_width=2.5, tip_length=0.15,
+            pt_neg, pt_pos, buff=0,
+            color=MARGIN_COLOR, stroke_width=2.5, tip_length=0.12,
         )
         margin_text = MathTex(
-            r"\frac{2}{\|\mathbf{w}\|}", font_size=28, color=MARGIN_COLOR,
-        ).next_to(margin_arrow, RIGHT, buff=0.1)
+            r"\frac{2}{\|\mathbf{w}\|}", font_size=26, color=MARGIN_COLOR,
+        ).next_to(margin_arrow, RIGHT, buff=0.12)
 
         sv_pointer = CurvedArrow(
-            start_point=sv_badge.get_top() + RIGHT * 1.5,
-            end_point=sv_rings[0].get_bottom() + DOWN * 0.05,
-            color=WHITE, angle=-PI / 3, stroke_width=2, tip_length=0.15,
+            start_point=sv_badge_group.get_left() + LEFT * 0.1,
+            end_point=sv_rings[0].get_right() + RIGHT * 0.05,
+            color=WHITE, angle=PI / 4, stroke_width=1.8, tip_length=0.12,
         )
 
         self.play(
@@ -748,14 +804,12 @@ class ScoreCombinationScene(MovingCameraScene):
         )
         self.wait(1.0)
 
-        # ── Clean up Phase 3 overlays; pass hyperplane to Phase 4 ─────────────
+        # ── Clean up Phase 3 ──────────────────────────────────────────────────
         self.play(
-            FadeOut(sv_badge), FadeOut(sv_pointer),
-            FadeOut(sv_rings),
+            FadeOut(sv_badge_group), FadeOut(sv_pointer), FadeOut(sv_rings),
             FadeOut(margin_arrow), FadeOut(margin_text),
             FadeOut(subtitle), FadeOut(underline),
-            FadeOut(final_margin_pos), FadeOut(final_margin_neg),
-            FadeOut(final_band),
+            FadeOut(final_mp), FadeOut(final_mn), FadeOut(final_band),
             run_time=1.0,
         )
         self.wait(0.3)
@@ -778,12 +832,11 @@ class ScoreCombinationScene(MovingCameraScene):
         flash_rect = Rectangle(
             width=config.frame_width + 2,
             height=config.frame_height + 2,
-            fill_color=SPOOF_RED, fill_opacity=0.0,
-            stroke_width=0,
+            fill_color=SPOOF_RED, fill_opacity=0.0, stroke_width=0,
         )
         self.add(flash_rect)
         self.play(
-            flash_rect.animate.set_fill(opacity=0.32),
+            flash_rect.animate.set_fill(opacity=0.30),
             run_time=0.3, rate_func=there_and_back,
         )
         self.remove(flash_rect)
@@ -796,7 +849,6 @@ class ScoreCombinationScene(MovingCameraScene):
         warning_vn = Text(
             "Tấn công giả mạo", font=FONT, font_size=22, color=SPOOF_RED,
         ).next_to(warning_en, DOWN, buff=0.10)
-
         warning_bg = SurroundingRectangle(
             VGroup(warning_en, warning_vn),
             fill_color=BLACK, fill_opacity=0.75,
@@ -804,8 +856,7 @@ class ScoreCombinationScene(MovingCameraScene):
             corner_radius=0.14, buff=0.18,
         )
         self.play(
-            FadeIn(warning_bg),
-            Write(warning_en),
+            FadeIn(warning_bg), Write(warning_en),
             FadeIn(warning_vn, shift=DOWN * 0.1),
             run_time=0.8,
         )
@@ -829,15 +880,26 @@ class ScoreCombinationScene(MovingCameraScene):
             for x, y in spoof_br_pts
         ])
 
-        # Cluster annotations
+        # Cluster captions — side of each cluster, clear of axes
         tl_caption = Text(
             "Silicone fingerprint\n(Giả mạo vân tay)",
-            font=FONT, font_size=14, color=IMPOSTOR_COLOR,
-        ).next_to(spoof_tl, LEFT, buff=0.18)
+            font=FONT, font_size=13, color=IMPOSTOR_COLOR,
+        )
+        tl_caption_bg = SurroundingRectangle(
+            tl_caption, fill_color=BG_COLOR, fill_opacity=0.7,
+            stroke_width=0, buff=0.06,
+        )
+        tl_cap_group = VGroup(tl_caption_bg, tl_caption).next_to(spoof_tl, RIGHT, buff=0.15)
+
         br_caption = Text(
             "3D face mask\n(Mặt nạ khuôn mặt)",
-            font=FONT, font_size=14, color=IMPOSTOR_COLOR,
-        ).next_to(spoof_br, RIGHT, buff=0.18)
+            font=FONT, font_size=13, color=IMPOSTOR_COLOR,
+        )
+        br_caption_bg = SurroundingRectangle(
+            br_caption, fill_color=BG_COLOR, fill_opacity=0.7,
+            stroke_width=0, buff=0.06,
+        )
+        br_cap_group = VGroup(br_caption_bg, br_caption).next_to(spoof_br, LEFT, buff=0.15)
 
         self.play(
             LaggedStart(
@@ -849,29 +911,31 @@ class ScoreCombinationScene(MovingCameraScene):
             run_time=1.0,
         )
         self.play(
-            FadeIn(tl_caption, shift=RIGHT * 0.15),
-            FadeIn(br_caption, shift=LEFT * 0.15),
+            FadeIn(tl_cap_group, shift=LEFT * 0.12),
+            FadeIn(br_cap_group, shift=RIGHT * 0.12),
             run_time=0.5,
         )
         self.wait(0.5)
 
-        # ── XOR label ─────────────────────────────────────────────────────────
+        # ── XOR label at bottom with dark background ──────────────────────────
         xor_label = MathTex(
             r"\text{XOR Layout}", color=SPOOF_RED, font_size=26,
-        ).to_edge(DOWN, buff=0.5)
+        )
         xor_sub = Text(
             "No linear boundary can separate this!",
             font=FONT, font_size=15, color=SLATE_GRAY,
-        ).next_to(xor_label, DOWN, buff=0.14)
-
-        self.play(
-            FadeIn(xor_label, shift=UP * 0.15),
-            FadeIn(xor_sub),
-            run_time=0.5,
         )
+        xor_group = VGroup(xor_label, xor_sub).arrange(DOWN, buff=0.10)
+        xor_bg = SurroundingRectangle(
+            xor_group, fill_color=BG_COLOR, fill_opacity=0.75,
+            stroke_width=0, buff=0.12,
+        )
+        xor_block = VGroup(xor_bg, xor_group).to_edge(DOWN, buff=0.4)
+
+        self.play(FadeIn(xor_block, shift=UP * 0.15), run_time=0.5)
         self.wait(0.3)
 
-        # ── Hyperplane rotates wildly — colour shifts yellow → red ────────────
+        # ── Hyperplane rotates wildly (yellow → red) ──────────────────────────
         angle_tracker = ValueTracker(0)
         c_yellow = ManimColor(HYPERPLANE_COLOR)
         c_red = ManimColor(SPOOF_RED)
@@ -898,30 +962,8 @@ class ScoreCombinationScene(MovingCameraScene):
             run_time=0.5,
         )
 
-        # ── Failure icon (abstract ✕ cross) + caption ─────────────────────────
-        cross_size = 0.5
-        cross = VGroup(
-            Line(UL * cross_size, DR * cross_size, color=SPOOF_RED, stroke_width=5),
-            Line(UR * cross_size, DL * cross_size, color=SPOOF_RED, stroke_width=5),
-        ).move_to(ORIGIN + UP * 0.85)
-
-        failure_text = Text(
-            "⚠  Tuyến tính thất bại!",
-            font=FONT, font_size=22, weight=BOLD, color=SPOOF_RED,
-        ).next_to(cross, DOWN, buff=0.2)
-
-        failure_bg = SurroundingRectangle(
-            VGroup(cross, failure_text),
-            fill_color=BLACK, fill_opacity=0.82,
-            stroke_color=SPOOF_RED, stroke_width=1.8,
-            corner_radius=0.12, buff=0.22,
-        )
-        self.play(
-            FadeIn(failure_bg),
-            Create(cross),
-            Write(failure_text),
-            run_time=0.8,
-        )
+        # ── Failure message (top-left, high contrast) ─────────────────────────
+        failure_block = self._handle_xor_failure()
         self.wait(1.2)
 
         # ── Fade everything to black ──────────────────────────────────────────
