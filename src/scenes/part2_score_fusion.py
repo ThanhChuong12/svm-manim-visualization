@@ -447,7 +447,6 @@ class ScoreCombinationScene(MovingCameraScene):
         noisy_start_pos = axes.c2p(0.45, 0.08)
         noisy_icon.move_to(noisy_start_pos + UP * 0.55)
 
-        # FIX: Move label UP to avoid collision with the upward rescue arrow
         noisy_label = Text(
             "Ảnh nhiễu", font=FONT, font_size=12, color="#888888",
         ).next_to(noisy_icon, UP, buff=0.1)
@@ -459,7 +458,7 @@ class ScoreCombinationScene(MovingCameraScene):
         self.play(GrowFromCenter(noisy_icon), FadeIn(noisy_label), run_time=0.7)
         self.wait(0.3)
 
-        # FIX: Arrow starts above axis, ends exactly at the BOTTOM of the icon
+        # Arrow starts above axis, ends exactly at the BOTTOM of the icon
         rescue_arrow_g = Arrow(
             noisy_start_pos + UP * 0.20,
             noisy_target_center + DOWN * 0.40,
@@ -467,11 +466,12 @@ class ScoreCombinationScene(MovingCameraScene):
             buff=0.1, max_tip_length_to_length_ratio=0.12,
         )
 
+        # Tính toán vector tịnh tiến để di chuyển cả icon và text đồng bộ
+        move_vector = noisy_target_center - noisy_icon.get_center()
+
         self.play(
             noisy_icon.animate.move_to(noisy_target_center),
-            noisy_label.animate.next_to(
-                Dot(noisy_target_center), UP, buff=0.1,
-            ),
+            noisy_label.animate.shift(move_vector), # Tịnh tiến text theo icon
             Create(rescue_arrow_g),
             run_time=1.4, rate_func=smooth,
         )
