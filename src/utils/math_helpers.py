@@ -1,16 +1,25 @@
-"""Reusable mathematical functions for SVM / biometric score visualisations."""
+"""Reusable mathematical functions for SVM / biometric score visualisations.
 
-import numpy as np
+NOTE: Core math logic has been moved to `core.score_norm`.
+This module re-exports for backward compatibility with part1.
+"""
 
+import sys
+import os
 
-def gaussian(x: float, mu: float, sigma: float) -> float:
-    """Normalised Gaussian probability density function (PDF)."""
-    return np.exp(-((x - mu) ** 2) / (2 * sigma ** 2)) / (sigma * np.sqrt(2 * np.pi))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    from core.score_norm import gaussian, min_func
+except ImportError:
+    # Fallback if core is not on path
+    import numpy as np
 
-def min_func(f, g):
-    """Return a callable that evaluates min(f(x), g(x)) point-wise.
+    def gaussian(x: float, mu: float, sigma: float) -> float:
+        return float(
+            np.exp(-((x - mu) ** 2) / (2 * sigma ** 2))
+            / (sigma * np.sqrt(2 * np.pi))
+        )
 
-    Useful for computing the visual overlap area between two distributions.
-    """
-    return lambda x: min(f(x), g(x))
+    def min_func(f, g):
+        return lambda x: min(f(x), g(x))
