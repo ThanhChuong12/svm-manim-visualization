@@ -1,4 +1,4 @@
-"""Module containing the UnibiometricsScene which visualizes the limitations of single-modal biometric systems using 1D decision thresholds."""
+"""Unibiometric scene for the single-modal thresholding narrative."""
 
 from manim import *
 import numpy as np
@@ -34,21 +34,19 @@ except ImportError:
         """Return a callable that evaluates min(f(x), g(x)) point-wise."""
         return lambda x: min(f(x), g(x))
 
-# ── Scene constants ───────────────────────────────────────────────────────────
 SIGMA_IDEAL    = 1.0
 SIGMA_REAL     = 1.3
 X_MIN, X_MAX   = -7, 7
 PEAK_Y         = 1.0       # Gaussian peak in data-y units
-GAUSSIAN_SCALE = 2.5       # raw PDF peak (~0.398) × scale → ~1.0
+GAUSSIAN_SCALE = 2.5       # raw PDF peak (~0.398) × scale -> ~1.0
 FONT           = FONT_MAIN
 
-# Safe World-space vertical lifts
 ICON_LIFT      = 1.10      
 LABEL_Y_WORLD  = 3.20      
 
 
 def scaled_gaussian(x: float, mu: float, sigma: float) -> float:
-    """Computes a Gaussian PDF scaled to visual dimensions for presentation."""
+    """Return a Gaussian PDF scaled to match the scene layout."""
     return gaussian(x, mu, sigma) * GAUSSIAN_SCALE
 
 
@@ -58,40 +56,70 @@ try:
         make_noisy_icon, make_spoof_icon,
     )
 except ImportError:
-    # Inline fallbacks if visual_helpers is unreachable
     from manim import Ellipse, Dot, Arc, Line, RoundedRectangle, Rectangle, VGroup
 
     def make_genuine_icon(size=0.6):
-        head = Ellipse(width=size*1.2, height=size*1.5, stroke_color=GENUINE_COLOR, stroke_width=2, fill_color="#1A1D27", fill_opacity=1)
-        eye_l = Dot(LEFT*size*0.25+UP*size*0.20, radius=size*0.06, color=GENUINE_COLOR)
-        eye_r = Dot(RIGHT*size*0.25+UP*size*0.20, radius=size*0.06, color=GENUINE_COLOR)
-        mouth = Arc(radius=size*0.30, start_angle=-10*DEGREES, angle=-160*DEGREES, color=GENUINE_COLOR, stroke_width=2).shift(DOWN*size*0.20)
+        head = Ellipse(
+            width=size * 1.2, height=size * 1.5,
+            stroke_color=GENUINE_COLOR, stroke_width=2,
+            fill_color="#1A1D27", fill_opacity=1,
+        )
+        eye_l = Dot(LEFT * size * 0.25 + UP * size * 0.20, radius=size * 0.06, color=GENUINE_COLOR)
+        eye_r = Dot(RIGHT * size * 0.25 + UP * size * 0.20, radius=size * 0.06, color=GENUINE_COLOR)
+        mouth = Arc(
+            radius=size * 0.30,
+            start_angle=-10 * DEGREES,
+            angle=-160 * DEGREES,
+            color=GENUINE_COLOR,
+            stroke_width=2,
+        ).shift(DOWN * size * 0.20)
         return VGroup(head, eye_l, eye_r, mouth)
 
     def make_impostor_icon(size=0.6):
-        head = Ellipse(width=size*1.2, height=size*1.5, stroke_color=IMPOSTOR_COLOR, stroke_width=2, fill_color="#1A1D27", fill_opacity=1)
-        eye_l = Dot(LEFT*size*0.25+UP*size*0.20, radius=size*0.06, color=IMPOSTOR_COLOR)
-        eye_r = Dot(RIGHT*size*0.25+UP*size*0.20, radius=size*0.06, color=IMPOSTOR_COLOR)
-        mouth = Line(LEFT*size*0.20, RIGHT*size*0.30, color=IMPOSTOR_COLOR, stroke_width=2).shift(DOWN*size*0.20).rotate(15*DEGREES)
+        head = Ellipse(
+            width=size * 1.2, height=size * 1.5,
+            stroke_color=IMPOSTOR_COLOR, stroke_width=2,
+            fill_color="#1A1D27", fill_opacity=1,
+        )
+        eye_l = Dot(LEFT * size * 0.25 + UP * size * 0.20, radius=size * 0.06, color=IMPOSTOR_COLOR)
+        eye_r = Dot(RIGHT * size * 0.25 + UP * size * 0.20, radius=size * 0.06, color=IMPOSTOR_COLOR)
+        mouth = Line(
+            LEFT * size * 0.20, RIGHT * size * 0.30,
+            color=IMPOSTOR_COLOR, stroke_width=2,
+        ).shift(DOWN * size * 0.20).rotate(15 * DEGREES)
         return VGroup(head, eye_l, eye_r, mouth)
 
     def make_noisy_icon(size=0.6):
         face = make_genuine_icon(size)
         face.set_color("#888888")
-        lines = VGroup(*[Line(LEFT*size*0.75, RIGHT*size*0.75, color=WHITE, stroke_width=1.2, stroke_opacity=0.65).shift(UP*size*dy) for dy in [-0.20, 0.05, 0.32]])
+        lines = VGroup(*[
+            Line(
+                LEFT * size * 0.75, RIGHT * size * 0.75,
+                color=WHITE, stroke_width=1.2, stroke_opacity=0.65,
+            ).shift(UP * size * dy)
+            for dy in [-0.20, 0.05, 0.32]
+        ])
         return VGroup(face, lines)
 
     def make_spoof_icon(size=0.6):
-        phone = RoundedRectangle(width=size*1.6, height=size*2.4, corner_radius=0.10, stroke_color=WHITE, stroke_width=2, fill_color="#000000", fill_opacity=1)
-        screen = Rectangle(width=size*1.35, height=size*1.90, stroke_color="#333333", stroke_width=1, fill_color="#111122", fill_opacity=1)
+        phone = RoundedRectangle(
+            width=size * 1.6, height=size * 2.4, corner_radius=0.10,
+            stroke_color=WHITE, stroke_width=2,
+            fill_color="#000000", fill_opacity=1,
+        )
+        screen = Rectangle(
+            width=size * 1.35, height=size * 1.90,
+            stroke_color="#333333", stroke_width=1,
+            fill_color="#111122", fill_opacity=1,
+        )
         face_on_screen = make_genuine_icon(size*0.65)
         return VGroup(phone, screen, face_on_screen)
 
 
 def _make_warning_badge(text_str: str, color: ManimColor) -> VGroup:
-    """Creates a warning text label enclosed in a rounded border of the specified color."""
+    """Create a warning badge with a matching outline."""
     label = Text(text_str, font=FONT, font_size=16, color=color)
-    bg    = SurroundingRectangle(
+    bg = SurroundingRectangle(
         label,
         fill_color=BLACK, fill_opacity=0.85,
         stroke_color=color, stroke_width=1.3,
@@ -99,8 +127,6 @@ def _make_warning_badge(text_str: str, color: ManimColor) -> VGroup:
     )
     return VGroup(bg, label)
 
-
-# ── Main Scene ─────────────────────────────────────────────────────────────
 
 class UnibiometricsScene(Scene):
     """Visualizes the limitations of unibiometric systems using 1D thresholding.
@@ -110,7 +136,7 @@ class UnibiometricsScene(Scene):
     """
 
     def construct(self) -> None:
-        """Orchestrates the animation phases sequentially."""
+        """Build and play the scene in sequence."""
         self.camera.background_color = BG_COLOR
 
         axes = Axes(
@@ -151,7 +177,7 @@ class UnibiometricsScene(Scene):
         mu_imp: ValueTracker, mu_gen: ValueTracker,
         sigma_imp: ValueTracker, sigma_gen: ValueTracker,
     ) -> None:
-        """Phase 1: Displays perfectly separated genuine and impostor distributions (Ideal Case)."""
+        """Show the ideal case with clearly separated distributions."""
         imp_curve = always_redraw(lambda: axes.plot(
             lambda x: scaled_gaussian(x, mu_imp.get_value(), sigma_imp.get_value()),
             x_range=[X_MIN, X_MAX], color=IMPOSTOR_COLOR, stroke_width=3))
@@ -174,8 +200,6 @@ class UnibiometricsScene(Scene):
         self._gen_fill  = gen_fill
 
         imp_lbl = Text("Kẻ mạo danh", font=FONT, font_size=20, color=IMPOSTOR_COLOR)
-        # Keep labels centered horizontally with the sliding distributions,
-        # but at a fixed vertical height (LABEL_Y_WORLD).
         imp_lbl.add_updater(lambda m: m.move_to(
             np.array([axes.c2p(mu_imp.get_value() - 1.2, 0)[0], LABEL_Y_WORLD, 0])
         ))
@@ -188,16 +212,18 @@ class UnibiometricsScene(Scene):
         self._imp_lbl = imp_lbl
         self._gen_lbl = gen_lbl
 
-        ICON_SZ = 0.45 
-        gen_icon = make_genuine_icon(ICON_SZ)
+        icon_size = 0.45
+        gen_icon = make_genuine_icon(icon_size)
         gen_icon.move_to(axes.c2p(3.0, PEAK_Y) + UP * ICON_LIFT)
-        gen_icon_lbl = Text("Người hợp lệ", font=FONT, font_size=13, color=GENUINE_COLOR
-                            ).next_to(gen_icon, DOWN, buff=0.08)
+        gen_icon_lbl = Text(
+            "Người hợp lệ", font=FONT, font_size=13, color=GENUINE_COLOR,
+        ).next_to(gen_icon, DOWN, buff=0.08)
 
-        imp_icon = make_impostor_icon(ICON_SZ)
+        imp_icon = make_impostor_icon(icon_size)
         imp_icon.move_to(axes.c2p(-3.0, PEAK_Y) + UP * ICON_LIFT)
-        imp_icon_lbl = Text("Kẻ tấn công", font=FONT, font_size=13, color=IMPOSTOR_COLOR
-                            ).next_to(imp_icon, DOWN, buff=0.08)
+        imp_icon_lbl = Text(
+            "Kẻ tấn công", font=FONT, font_size=13, color=IMPOSTOR_COLOR,
+        ).next_to(imp_icon, DOWN, buff=0.08)
 
         self._gen_icon     = gen_icon
         self._gen_icon_lbl = gen_icon_lbl
@@ -222,7 +248,7 @@ class UnibiometricsScene(Scene):
         mu_imp: ValueTracker, mu_gen: ValueTracker,
         sigma_imp: ValueTracker, sigma_gen: ValueTracker,
     ):
-        """Phase 2: Introduces noise and spoofing scenarios, demonstrating the shifting and overlapping of distributions in a real-world environment."""
+        """Introduce noisy and spoofed samples, then widen the overlap."""
         imp_curve = self._imp_curve
         imp_fill  = self._imp_fill
         gen_curve = self._gen_curve
@@ -238,38 +264,40 @@ class UnibiometricsScene(Scene):
             run_time=0.5
         )
 
-        NOISY_X = 3.5  
-        SPOOF_X = -3.5 
+        noisy_x = 3.5
+        spoof_x = -3.5
 
-        noisy_dot  = Dot(axes.c2p(NOISY_X, 0), color=GENUINE_COLOR, radius=0.11)
+        noisy_dot  = Dot(axes.c2p(noisy_x, 0), color=GENUINE_COLOR, radius=0.11)
         noisy_ring = Circle(radius=0.18, color=GENUINE_COLOR,
                             stroke_width=1.5, stroke_opacity=0.45
-                            ).move_to(axes.c2p(NOISY_X, 0))
-        noisy_icon = make_noisy_icon(0.40) 
-        noisy_icon.move_to(axes.c2p(NOISY_X, PEAK_Y) + UP * ICON_LIFT)
-        noisy_lbl  = Text("Ảnh nhiễu (Noise)", font=FONT, font_size=13, color="#888888"
-                          ).next_to(noisy_icon, DOWN, buff=0.08)
+                            ).move_to(axes.c2p(noisy_x, 0))
+        noisy_icon = make_noisy_icon(0.40)
+        noisy_icon.move_to(axes.c2p(noisy_x, PEAK_Y) + UP * ICON_LIFT)
+        noisy_lbl = Text(
+            "Ảnh nhiễu (Noise)", font=FONT, font_size=13, color="#888888",
+        ).next_to(noisy_icon, DOWN, buff=0.08)
 
         self.play(
             FadeIn(noisy_ring, scale=0.5), FadeIn(noisy_dot, scale=0.5), run_time=0.55)
         self.play(GrowFromCenter(noisy_icon), FadeIn(noisy_lbl), run_time=0.90)
         self.wait(0.4)
 
-        spoof_dot  = Dot(axes.c2p(SPOOF_X, 0), color=IMPOSTOR_COLOR, radius=0.11)
+        spoof_dot  = Dot(axes.c2p(spoof_x, 0), color=IMPOSTOR_COLOR, radius=0.11)
         spoof_ring = Circle(radius=0.18, color=IMPOSTOR_COLOR,
                             stroke_width=1.5, stroke_opacity=0.45
-                            ).move_to(axes.c2p(SPOOF_X, 0))
+                            ).move_to(axes.c2p(spoof_x, 0))
         spoof_icon = make_spoof_icon(0.40)
-        spoof_icon.move_to(axes.c2p(SPOOF_X, PEAK_Y) + UP * ICON_LIFT)
-        spoof_lbl  = Text("Tấn công giả mạo (Spoof)", font=FONT, font_size=13,
-                          color=IMPOSTOR_COLOR).next_to(spoof_icon, DOWN, buff=0.08)
+        spoof_icon.move_to(axes.c2p(spoof_x, PEAK_Y) + UP * ICON_LIFT)
+        spoof_lbl = Text(
+            "Tấn công giả mạo (Spoof)", font=FONT, font_size=13,
+            color=IMPOSTOR_COLOR,
+        ).next_to(spoof_icon, DOWN, buff=0.08)
 
         self.play(
             FadeIn(spoof_ring, scale=0.5), FadeIn(spoof_dot, scale=0.5), run_time=0.55)
         self.play(GrowFromCenter(spoof_icon), FadeIn(spoof_lbl), run_time=0.90)
         self.wait(0.5)
 
-        # Animate the distributions widening and shifting closer, creating overlap
         self.play(
             mu_imp.animate.set_value(-1.0),
             mu_gen.animate.set_value( 1.0),
@@ -291,11 +319,10 @@ class UnibiometricsScene(Scene):
         ))
         self.play(FadeIn(ovlp_fill), run_time=0.90)
 
-        # Find the intersection height of the two symmetrical Gaussians at x = 0.0
         inter_world_y = axes.c2p(0.0, scaled_gaussian(0.0, -1.0, SIGMA_REAL))[1]
-        confusion_text = Text("Vùng nhiễu", font=FONT,
-                               font_size=15, color=OVERLAP_COLOR)
-        confusion_text.move_to(axes.c2p(0.0, PEAK_Y + 0.25)) 
+        confusion_text = Text(
+            "Vùng nhiễu", font=FONT, font_size=15, color=OVERLAP_COLOR,
+        ).move_to(axes.c2p(0.0, PEAK_Y + 0.25))
         
         confusion_arrow = Arrow(
             confusion_text.get_bottom() + DOWN * 0.05,
@@ -303,14 +330,17 @@ class UnibiometricsScene(Scene):
             color=OVERLAP_COLOR, stroke_width=2.5,
             max_tip_length_to_length_ratio=0.15,
         )
-        cg = VGroup(confusion_text, confusion_arrow)
+        confusion_group = VGroup(confusion_text, confusion_arrow)
         self.play(FadeIn(confusion_text), Create(confusion_arrow), run_time=0.8)
         
-        # Flash visual highlight twice to emphasize the overlap region
         for _ in range(2):
-            self.play(cg.animate.set_opacity(0.22), run_time=0.35, rate_func=there_and_back)
+            self.play(
+                confusion_group.animate.set_opacity(0.22),
+                run_time=0.35,
+                rate_func=there_and_back,
+            )
         self.wait(0.9)
-        self.play(FadeOut(cg), run_time=0.5)
+        self.play(FadeOut(confusion_group), run_time=0.5)
 
         self.play(
             FadeOut(noisy_dot), FadeOut(noisy_ring),
@@ -332,7 +362,7 @@ class UnibiometricsScene(Scene):
         imp_curve, imp_fill, gen_curve, gen_fill,
         imp_lbl, gen_lbl, ovlp_fill,
     ) -> None:
-        """Phase 3: Explores the trade-off of the decision threshold by sliding eta to show FAR and FRR scenarios."""
+        """Explore the decision-threshold trade-off and its failure modes."""
         eta = ValueTracker(0.0)
 
         threshold_line = always_redraw(lambda: DashedLine(
@@ -348,7 +378,6 @@ class UnibiometricsScene(Scene):
         self.play(Create(threshold_line), FadeIn(eta_lbl), run_time=1.0)
         self.wait(0.5)
 
-        # ── False Accept Rate (FAR) Scenario ──
         ETA_FAR = -1.5
 
         far_fill = always_redraw(lambda: axes.get_area(
@@ -371,10 +400,9 @@ class UnibiometricsScene(Scene):
         self.play(FadeIn(far_fill), run_time=0.35)
         self.play(eta.animate.set_value(ETA_FAR), run_time=2.2, rate_func=smooth)
 
-        # Draw warning arrow from badge pointing to the incorrectly accepted distribution tail
         far_arrow = Arrow(
             far_badge.get_left(),
-            axes.c2p(-0.7, 0.08),  
+            axes.c2p(-0.7, 0.08),
             color=IMPOSTOR_COLOR, stroke_width=2.2,
             max_tip_length_to_length_ratio=0.15,
         )
@@ -390,7 +418,6 @@ class UnibiometricsScene(Scene):
             run_time=0.6,
         )
 
-        # ── False Reject Rate (FRR) Scenario ──
         ETA_FRR = 1.5
 
         frr_fill = always_redraw(lambda: axes.get_area(
@@ -413,10 +440,9 @@ class UnibiometricsScene(Scene):
         self.play(FadeIn(frr_fill), run_time=0.35)
         self.play(eta.animate.set_value(ETA_FRR), run_time=2.2, rate_func=smooth)
 
-        # Draw warning arrow from badge pointing to the incorrectly rejected genuine tail
         frr_arrow = Arrow(
             frr_badge.get_right(),
-            axes.c2p(0.7, 0.08),  
+            axes.c2p(0.7, 0.08),
             color=GENUINE_COLOR, stroke_width=2.2,
             max_tip_length_to_length_ratio=0.15,
         )
@@ -432,11 +458,9 @@ class UnibiometricsScene(Scene):
             run_time=0.6,
         )
 
-        # ── Cleanup and exit phase ──
         self.play(eta.animate.set_value(0.0), run_time=1.0, rate_func=smooth)
         self.wait(0.5)
 
-        # Clear active updaters to prevent unexpected behavior during fadeout animations
         imp_lbl.clear_updaters()
         gen_lbl.clear_updaters()
         eta_lbl.clear_updaters()
@@ -451,24 +475,51 @@ class UnibiometricsScene(Scene):
         )
 
     def _phase4_transition(self, axes: Axes, x_axis_label: Text) -> None:
-        """Phase 4: Introduces the second biometric modality (Fingerprint Score) to transition from 1D to 2D representation."""
-        y_line = Line(
-            axes.c2p(0, 0), axes.c2p(0, 1.12),
-            color=WHITE, stroke_width=2, stroke_opacity=0.65,
+        """Transition from 1D to 2D with a coordinate lift effect."""
+
+        y_axis_arrow = Arrow(
+            start=axes.c2p(0, 0),
+            end=axes.c2p(0, 1.25),
+            color=WHITE,
+            stroke_width=2.5,
+            buff=0,
+            max_tip_length_to_length_ratio=0.1,
         )
-        y_arrow = Triangle(
-            color=WHITE, fill_color=WHITE, fill_opacity=1,
-        ).scale(0.075).rotate(PI).next_to(y_line, UP, buff=0)
+
         y_label = Text("Fingerprint Score", font=FONT, font_size=15, color=SLATE_GRAY)
-        y_label.rotate(PI / 2).next_to(y_arrow, LEFT, buff=0.18).shift(DOWN * 0.45)
+        y_label.rotate(PI / 2).next_to(y_axis_arrow, LEFT, buff=0.25).shift(DOWN * 0.2)
 
         self.play(
-            Create(y_line), FadeIn(y_arrow),
+            GrowArrow(y_axis_arrow),
             FadeIn(y_label, shift=RIGHT * 0.2),
-            run_time=1.6,
+            run_time=1.5,
         )
-        self.wait(1.0)
+        self.wait(0.5)
 
-        # Fade out all elements to prepare the scene for parts 2 and 3
+        demo_dot = Dot(axes.c2p(1.5, 0), color=GENUINE_COLOR, radius=0.08)
+        demo_lbl = Text("Add fingerprint evidence", font=FONT, font_size=13, color=GENUINE_COLOR)
+        
+        demo_lbl.add_updater(lambda m: m.next_to(demo_dot, UR, buff=0.15))
+
+        self.play(FadeIn(demo_dot), FadeIn(demo_lbl), run_time=0.8)
+
+        tracking_line = always_redraw(lambda: DashedLine(
+            start=axes.c2p(1.5, 0),
+            end=demo_dot.get_center(),
+            color=GENUINE_COLOR, stroke_width=1.5, dash_length=0.05
+        ).set_opacity(0.6))
+        
+        self.add(tracking_line)
+
+        self.play(
+            demo_dot.animate.move_to(axes.c2p(1.5, 0.9)),
+            run_time=2.0,
+            rate_func=smooth
+        )
+        self.wait(1.2)
+
+        demo_lbl.clear_updaters()
+        tracking_line.clear_updaters()
+
         self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.5)
         self.wait(0.5)
