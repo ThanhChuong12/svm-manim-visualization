@@ -11,7 +11,6 @@ Data generated via sklearn.datasets.make_circles, RBF lift z = e^{-γ(x²+y²)}.
 
 import numpy as np
 from manim import *
-from sklearn.datasets import make_circles
 import sys
 import os
 
@@ -39,6 +38,23 @@ except ImportError:
     def make_spoof_icon(size=0.6):
         return Square(side_length=size, color=IMPOSTOR_COLOR, stroke_width=2)
 
+try:
+    from core.kernels import rbf_z as _rbf_z
+    from core.fusion_data import generate_circle_data as _generate_circle_data
+except ImportError:
+    from sklearn.datasets import make_circles
+
+    def _rbf_z(x, y, gamma=2.0):
+        return float(np.exp(-gamma * (x ** 2 + y ** 2)))
+
+    def _generate_circle_data(seed=42):
+        X, y = make_circles(n_samples=80, noise=0.08, factor=0.4, random_state=seed)
+        X = X * 1.6
+        inner = [X[i] for i in range(len(y)) if y[i] == 1]
+        outer = [X[i] for i in range(len(y)) if y[i] == 0]
+        return inner, outer
+
+
 # ── Scene-local design tokens ─────────────────────────────────────────────────
 FONT              = FONT_MAIN
 LASER_YELLOW      = HYPERPLANE_COLOR
@@ -61,33 +77,6 @@ Z_RANGE           = [-0.2, 1.4, 0.5]
 AXIS_LEN_XY       = 5.5
 AXIS_LEN_Z        = 3.5
 DOT_RADIUS        = 0.07
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Module-level helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _rbf_z(x: float, y: float, gamma: float = GAMMA) -> float:
-    """RBF kernel mapping: z = exp(-γ(x² + y²))."""
-    return float(np.exp(-gamma * (x ** 2 + y ** 2)))
-
-
-def _generate_circle_data(seed: int = 42):
-    """Generate concentric circle data using sklearn.
-
-    Returns (inner_pts, outer_pts) as lists of [x, y] arrays.
-    Inner = genuine (class 1), Outer = impostor (class 0).
-    """
-    X, y = make_circles(
-        n_samples=N_SAMPLES, noise=CIRCLE_NOISE,
-        factor=CIRCLE_FACTOR, random_state=seed,
-    )
-    # Scale up for better visibility in Manim coordinates
-    X = X * 1.6
-
-    inner_pts = [X[i] for i in range(len(y)) if y[i] == 1]
-    outer_pts = [X[i] for i in range(len(y)) if y[i] == 0]
-    return inner_pts, outer_pts
 
 
 # ─────────────────────────────────────────────────────────────────────────────

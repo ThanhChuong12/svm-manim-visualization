@@ -73,23 +73,18 @@ N_CLOUD = 18
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Module-level helpers
+# Module-level helpers (delegated to core)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _scatter_2d(
-    center: tuple[float, float],
-    n: int,
-    sigma: float,
-    seed: int,
-    x_clip: tuple[float, float] = (0.05, 0.95),
-    y_clip: tuple[float, float] = (0.05, 0.95),
-) -> list[tuple[float, float]]:
-    """Return *n* (x, y) score-space points clustered around *center*."""
-    rng = np.random.default_rng(seed)
-    pts = rng.normal(loc=center, scale=sigma, size=(n, 2))
-    pts[:, 0] = np.clip(pts[:, 0], *x_clip)
-    pts[:, 1] = np.clip(pts[:, 1], *y_clip)
-    return [(float(x), float(y)) for x, y in pts]
+try:
+    from core.fusion_data import scatter_2d as _scatter_2d
+except ImportError:
+    def _scatter_2d(center, n, sigma, seed, x_clip=(0.05, 0.95), y_clip=(0.05, 0.95)):
+        rng = np.random.default_rng(seed)
+        pts = rng.normal(loc=center, scale=sigma, size=(n, 2))
+        pts[:, 0] = np.clip(pts[:, 0], *x_clip)
+        pts[:, 1] = np.clip(pts[:, 1], *y_clip)
+        return [(float(x), float(y)) for x, y in pts]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

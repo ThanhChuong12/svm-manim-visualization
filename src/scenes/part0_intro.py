@@ -36,14 +36,13 @@ ICON_FILL        = "#1A1D27"
 POINTS_PER_CLUSTER = 14
 CLUSTER_SIGMA      = 0.15
 
-
-# Helpers.
-
-def generate_cluster(center, n: int = POINTS_PER_CLUSTER, sigma: float = CLUSTER_SIGMA, seed=None):
-    """Generate a small 2D Gaussian cluster embedded in 3D space."""
-    rng = np.random.default_rng(seed)
-    pts = rng.normal(loc=np.asarray(center)[:2], scale=sigma, size=(n, 2))
-    return [np.array([x, y, 0.0]) for x, y in pts]
+try:
+    from core.fusion_data import generate_cluster
+except ImportError:
+    def generate_cluster(center, n=POINTS_PER_CLUSTER, sigma=CLUSTER_SIGMA, seed=None):
+        rng = np.random.default_rng(seed)
+        pts = rng.normal(loc=np.asarray(center)[:2], scale=sigma, size=(n, 2))
+        return [np.array([x, y, 0.0]) for x, y in pts]
 
 
 # Stylized biometric icon factories.
