@@ -499,7 +499,7 @@ class KernelTrickScene(ThreeDScene):
             fill_color=DOME_COLOR, fill_opacity=0.18,
             stroke_color=DOME_COLOR, stroke_width=1.0,
             stroke_opacity=0.4,
-            checkerboard_colors=None,
+            checkerboard_colors=False,
         )
         dome.set_color(DOME_COLOR)
 
