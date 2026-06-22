@@ -568,157 +568,117 @@ class KernelTrickScene(ThreeDScene):
         self._target_z = target_z
 
     # =========================================================================
-    # PHASE 4 — Projection Back to 2D
+    # PHASE 4: The XOR Trap
     # =========================================================================
-    def _phase4_projection_back(
-        self,
-        axes_3d: ThreeDAxes,
-        green_dots: VGroup,
-        red_dots: VGroup,
-    ) -> None:
-        """Camera back to top-down + circular boundary projection."""
-
-        target_z = self._target_z
-
-        # ── Clean up 3D overlays ──────────────────────────────────────────────
-        self.play(
-            FadeOut(self._dome),
-            FadeOut(self._static_plane),
-            FadeOut(self._static_glow),
-            FadeOut(self._reject_markers),
-            FadeOut(self._shield_badge_block),
-            FadeOut(self._shield_title),
-            run_time=1.0,
+    def _phase4_xor_trap(self, axes, genuine_cloud, impostor_cloud, hyperplane):
+        flash_rect = Rectangle(
+            width=config.frame_width + 2, height=config.frame_height + 2, 
+            fill_color=SPOOF_RED, fill_opacity=0.0, stroke_width=0
         )
+        self.add(flash_rect)
+        self.play(flash_rect.animate.set_fill(opacity=0.30), run_time=0.3, rate_func=there_and_back)
+        self.remove(flash_rect)
 
-        # ── Project dots back to z=0 ──────────────────────────────────────────
-        flatten_anims = []
-        for d in [*green_dots, *red_dots]:
-            cx, cy, _ = d.get_center()
-            flatten_anims.append(d.animate.move_to(np.array([cx, cy, 0.0])))
-
-        # Camera back to top-down
-        self.move_camera(
-            phi=0, theta=-90 * DEGREES,
-            run_time=3.0, rate_func=smooth,
-            added_anims=[
-                AnimationGroup(*flatten_anims, run_time=3.0, rate_func=smooth),
-            ],
+        warning_en = Text("Spoof Attack", font=FONT, font_size=28, weight=BOLD, color=SPOOF_RED).to_edge(UP, buff=0.30)
+        warning_vn = Text("XOR Trap!", font=FONT, font_size=22, color=SPOOF_RED).next_to(warning_en, DOWN, buff=0.10)
+        warning_bg = SurroundingRectangle(
+            VGroup(warning_en, warning_vn), fill_color=BLACK, fill_opacity=0.75, 
+            stroke_color=SPOOF_RED, stroke_width=1.5, corner_radius=0.14, buff=0.18
         )
+        self.play(FadeIn(warning_bg), Write(warning_en), FadeIn(warning_vn, shift=DOWN * 0.1), run_time=0.8)
         self.wait(0.4)
 
-        # ── Circular decision boundary ────────────────────────────────────────
-        # The intersection of z = exp(-γr²) with z = target_z_normalized gives:
-        #   r = sqrt(-ln(z_norm) / γ)
-        z_norm = target_z / (Z_RANGE[1] - 0.2)  # Undo the visual scaling
-        if z_norm > 0 and z_norm < 1:
-            r_boundary = np.sqrt(-np.log(z_norm) / GAMMA)
-        else:
-            r_boundary = 0.7
+        spoof_tl_pts = _scatter_2d((0.27, 0.75), N_CLOUD // 2, 0.08, RNG_SEED_SPOOF_TL)
+        spoof_tl = VGroup(*[Dot(axes.c2p(x, y), color=IMPOSTOR_COLOR, radius=0.09) for x, y in spoof_tl_pts])
+        
+        spoof_br_pts = _scatter_2d((0.72, 0.25), N_CLOUD // 2, 0.08, RNG_SEED_SPOOF_BR)
+        spoof_br = VGroup(*[Dot(axes.c2p(x, y), color=IMPOSTOR_COLOR, radius=0.09) for x, y in spoof_br_pts])
 
-        # Scale to match the coordinate system
-        boundary_circle = Circle(
-            radius=r_boundary * 1.6,  # Match the data scaling
-            color=HYPERPLANE_COLOR, stroke_width=3.5,
-        ).move_to(ORIGIN)
-
-        # Dashed version for elegance
-        boundary_dashed = DashedVMobject(
-            boundary_circle, num_dashes=40,
-        )
-
-        # Title
-        proj_title = Text(
-            "Circular Decision Boundary (Projected)",
-            font=FONT, font_size=20, color=HYPERPLANE_COLOR,
-        )
-        self.add_fixed_in_frame_mobjects(proj_title)
-        proj_title.to_edge(UP, buff=0.30)
-        self.play(
-            FadeIn(proj_title, shift=DOWN * 0.12),
-            Create(boundary_dashed),
-            run_time=1.2,
-        )
-        self.wait(0.4)
-
-        # ── Highlight support vectors (closest dots to the boundary) ──────────
-        def _dist_to_boundary(dot):
-            cx, cy, _ = dot.get_center()
-            r = np.sqrt(cx ** 2 + cy ** 2)
-            return abs(r - r_boundary * 1.6)
-
-        all_dots = [*green_dots, *red_dots]
-        distances = [(d, _dist_to_boundary(d)) for d in all_dots]
-        distances.sort(key=lambda x: x[1])
-        sv_count = min(6, len(distances))
-
-        sv_rings = VGroup()
-        for d, _ in distances[:sv_count]:
-            ring = Circle(
-                radius=0.18, color=WHITE, stroke_width=2.5,
-            ).move_to(d.get_center())
-            sv_rings.add(ring)
+        tl_caption = Text("Silicone fingerprint", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
+        tl_caption_bg = SurroundingRectangle(tl_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.06)
+        tl_cap_group = VGroup(tl_caption_bg, tl_caption).next_to(spoof_tl, RIGHT, buff=0.15)
+        
+        br_caption = Text("3D face mask", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
+        br_caption_bg = SurroundingRectangle(br_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.06)
+        br_cap_group = VGroup(br_caption_bg, br_caption).next_to(spoof_br, LEFT, buff=0.15)
 
         self.play(
-            LaggedStart(*[
-                AnimationGroup(
-                    Create(r),
-                    Flash(r.get_center(), color=WHITE,
-                          flash_radius=0.2, num_lines=5),
-                )
-                for r in sv_rings
-            ], lag_ratio=0.20),
-            run_time=1.2,
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_tl], lag_ratio=0.07), 
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_br], lag_ratio=0.07), 
+            run_time=1.0
         )
-
-        # SV label
-        sv_label = Text(
-            "Support Vectors", font=FONT, font_size=18, color=WHITE,
-        )
-        sv_bg = SurroundingRectangle(
-            sv_label, fill_color=BG_COLOR, fill_opacity=0.85,
-            stroke_width=0, buff=0.10,
-        )
-        sv_block = VGroup(sv_bg, sv_label)
-        self.add_fixed_in_frame_mobjects(sv_block)
-        sv_block.to_edge(DOWN, buff=0.5)
-        self.play(FadeIn(sv_block, shift=UP * 0.12), run_time=0.6)
+        self.play(FadeIn(tl_cap_group, shift=LEFT * 0.12), FadeIn(br_cap_group, shift=RIGHT * 0.12), run_time=0.5)
         self.wait(0.5)
 
-        # ── Final explanation annotation ──────────────────────────────────────
-        rbf_note = MathTex(
-            r"\text{RBF SVM} \rightarrow \text{Circular boundary in 2D}",
-            font_size=24, color=SLATE_GRAY,
-        )
-        self.add_fixed_in_frame_mobjects(rbf_note)
-        rbf_note.next_to(sv_block, UP, buff=0.3)
-        self.play(FadeIn(rbf_note, shift=UP * 0.1), run_time=0.6)
-        self.wait(1.2)
+        angle_tracker = ValueTracker(0)
+        c_yellow = ManimColor(HYPERPLANE_COLOR)
+        c_red = ManimColor(SPOOF_RED)
 
-        # ── Success badge ─────────────────────────────────────────────────────
-        success_text = Text(
-            "✓ Kernel Trick — Perfect Separation!",
-            font=FONT, font_size=20, weight=BOLD, color=GENUINE_COLOR,
-        )
-        success_bg = SurroundingRectangle(
-            success_text, fill_color=BLACK, fill_opacity=0.85,
-            stroke_color=GENUINE_COLOR, stroke_width=2,
-            corner_radius=0.12, buff=0.18,
-        )
-        success_block = VGroup(success_bg, success_text)
-        self.add_fixed_in_frame_mobjects(success_block)
-        success_block.move_to(ORIGIN)
+        def _hp_updater(line):
+            a = angle_tracker.get_value()
+            c, s = np.cos(a), np.sin(a)
+            pts = []
+            if abs(c) > 1e-5:
+                y0 = 0.5 + (0 - 0.5) * s / c
+                if 0 <= y0 <= 1: pts.append((0.0, y0))
+                y1 = 0.5 + (1 - 0.5) * s / c
+                if 0 <= y1 <= 1: pts.append((1.0, y1))
+            if abs(s) > 1e-5:
+                x0 = 0.5 + (0 - 0.5) * c / s
+                if 0 <= x0 <= 1: pts.append((x0, 0.0))
+                x1 = 0.5 + (1 - 0.5) * c / s
+                if 0 <= x1 <= 1: pts.append((x1, 1.0))
+            
+            unique_pts = []
+            for p in pts:
+                if not any(np.linalg.norm(np.array(p) - np.array(up)) < 1e-4 for up in unique_pts):
+                    unique_pts.append(p)
+            
+            if len(unique_pts) >= 2:
+                line.put_start_and_end_on(axes.c2p(*unique_pts[0]), axes.c2p(*unique_pts[1]))
+                
+            t = (np.sin(a * 6) + 1) / 2
+            line.set_color(interpolate_color(c_yellow, c_red, t))
+            line.set_stroke(width=3 + 4 * t)
+
+        hyperplane.add_updater(_hp_updater)
+        self.play(angle_tracker.animate.set_value(PI * 1.4), run_time=2.5, rate_func=linear)
+        hyperplane.remove_updater(_hp_updater)
+        
+        # ── Hiệu ứng Focus Dimming: Làm tối dữ liệu để làm nổi bật thông báo lỗi ──
         self.play(
-            FadeIn(success_bg), Write(success_text),
-            run_time=0.8,
+            hyperplane.animate.set_color(SPOOF_RED).set_stroke(opacity=0.5),
+            VGroup(genuine_cloud, impostor_cloud, spoof_tl, spoof_br, axes).animate.set_opacity(0.3),
+            run_time=0.5
+        )
+
+        # ── Cinematic Error Modal ──
+        cross_size = 0.35
+        cross = VGroup(
+            Line(UL * cross_size, DR * cross_size, color=SPOOF_RED, stroke_width=5),
+            Line(UR * cross_size, DL * cross_size, color=SPOOF_RED, stroke_width=5)
+        )
+        failure_text = Text("Linear Model Fails!", font=FONT, font_size=24, weight=BOLD, color=SPOOF_RED)
+        modal_content = VGroup(cross, failure_text).arrange(RIGHT, buff=0.25)
+        
+        failure_bg = SurroundingRectangle(
+            modal_content, fill_color=BLACK, fill_opacity=0.95, 
+            stroke_color=SPOOF_RED, stroke_width=2.5, corner_radius=0.1, buff=0.25
+        )
+        failure_modal = VGroup(failure_bg, modal_content).move_to(axes.c2p(0.5, 0.5))
+
+        self.play(
+            FadeIn(failure_bg, scale=1.1),
+            Create(cross),
+            Write(failure_text),
+            run_time=0.6
+        )
+        self.play(
+            Flash(failure_modal, color=SPOOF_RED, flash_radius=2.2, num_lines=12),
+            Wiggle(warning_vn, scale_value=1.2), # Nhấn mạnh chữ XOR Trap!
+            run_time=0.6
         )
         self.wait(1.5)
 
-        # ── Fade everything to black ──────────────────────────────────────────
-        all_fixed = [proj_title, sv_block, rbf_note, success_block]
-        self.play(
-            *[FadeOut(m) for m in self.mobjects],
-            *[FadeOut(f) for f in all_fixed],
-            run_time=1.5,
-        )
+        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.5)
         self.wait(0.5)
