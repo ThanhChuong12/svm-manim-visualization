@@ -179,25 +179,37 @@ class ScoreCombinationScene(MovingCameraScene):
         """
         Phase 2: The "Math Class" Detour
         Dạy học SVM bằng dữ liệu trừu tượng với không gian toán học chuẩn (Grid).
-        Minh họa quá trình mô hình tuyến tính "đảo" (rotate) để tìm điểm Support Vectors.
+        Phục dựng hiệu ứng Iteration (thử và sai) kết hợp mở rộng lề.
         """
-        # ── 1. Khởi tạo Grid Toán học & Dữ liệu trừu tượng ───────────────────
-        np.random.seed(42)
-        X, y = make_classification(n_samples=40, n_features=2, n_redundant=0, n_classes=2, random_state=42)
+        # ── 1. Khởi tạo Grid Toán học & Dữ liệu tĩnh (Toy Dataset) ────────────
+        blue_points = np.array([
+            [-3.0, -1.0], [-2.5, -2.0], [-1.5, -2.5], [-2.0, -0.5], 
+            [-1.0, -1.5], [-0.5, -3.0], [-4.0, -1.5], [-3.5, -3.0],
+            [-0.5, -0.5] # <-- Support Vector Xanh
+        ])
+        red_points = np.array([
+            [1.0, 3.0], [2.0, 2.5], [1.5, 4.0], [2.5, 3.5],
+            [3.5, 2.0], [3.0, 1.5], [4.0, 3.0], [3.0, 4.0],
+            [0.5, 1.5], # <-- Support Vector Đỏ 1
+            [1.5, 0.5]  # <-- Support Vector Đỏ 2
+        ])
+        X = np.vstack((blue_points, red_points))
+        y = np.array([0] * len(blue_points) + [1] * len(red_points))
         
-        # Tạo lưới toạ độ (Isotropic grid để margin vuông góc)
+        # Tạo lưới toạ độ (Isotropic grid)
         plane = NumberPlane(
-            x_range=[-5, 5, 1], y_range=[-5, 5, 1], 
-            x_length=7.5, y_length=7.5, 
+            x_range=[-6, 6, 1], y_range=[-4, 4, 1], 
+            x_length=9.0, y_length=6.0, 
             background_line_style={"stroke_opacity": 0.4}
-        )
+        ).shift(DOWN * 0.5)
+        
         self.play(Create(plane), run_time=1.5)
         
         x_label = plane.get_x_axis_label("x_1", direction=DOWN)
         y_label = plane.get_y_axis_label("x_2", direction=LEFT)
         self.play(Create(x_label), Create(y_label))
         
-        # Chấm đỏ / xanh mộc mạc
+        # Vẽ các chấm dữ liệu
         dots = VGroup(*[
             Dot(point=plane.c2p(pt[0], pt[1]), color=CLASS_A_COLOR if y[i]==0 else CLASS_B_COLOR, radius=0.08) 
             for i, pt in enumerate(X)
@@ -205,12 +217,13 @@ class ScoreCombinationScene(MovingCameraScene):
         self.play(Create(dots), run_time=1.2)
         self.wait(0.5)
 
-        title = Text("Searching for the optimal margin", font=FONT, font_size=28, color=WHITE).to_edge(UP)
+        # Tiêu đề chuyển lên góc UL (vùng mù)
+        title = Text("Searching for the optimal margin", font=FONT, font_size=28, color=WHITE).to_corner(UL)
         self.play(Write(title))
         self.wait(0.5)
 
         # ── 2. Tính toán mô hình SVM tối ưu bằng scikit-learn ────────────────
-        svm = SVC(kernel="linear", C=1, random_state=42).fit(X, y)
+        svm = SVC(kernel="linear", C=1000).fit(X, y)
         w_opt = svm.coef_[0]
         b_opt = svm.intercept_[0]
         svs = svm.support_vectors_
@@ -218,15 +231,14 @@ class ScoreCombinationScene(MovingCameraScene):
         opt_angle = np.arctan2(-w_opt[0], w_opt[1])
         opt_margin = 1.0 / np.linalg.norm(w_opt)
         
-        # Điểm tâm (center point) của đường phân chia để làm tâm xoay
         if abs(w_opt[1]) > 1e-5:
             cx, cy = 0.0, -b_opt / w_opt[1]
         else:
             cx, cy = -b_opt / w_opt[0], 0.0
 
-        # ── 3. Thiết lập ValueTrackers cho hiệu ứng tìm lề (Breathing) ───────
-        angle_tracker = ValueTracker(opt_angle + PI / 3.5) # Bắt đầu lệch góc
-        margin_tracker = ValueTracker(0.0)                 # Lề bắt đầu từ 0
+        # ── 3. Thiết lập ValueTrackers cho hiệu ứng tìm lề (Searching) ───────
+        angle_tracker = ValueTracker(opt_angle + PI / 4) # Bắt đầu lệch 45 độ
+        margin_tracker = ValueTracker(0.0)               # Lề bắt đầu bằng 0
         
         db_line = Line(LEFT, RIGHT, color=HYPERPLANE_COLOR, stroke_width=3)
         mp_line = DashedLine(LEFT, RIGHT, color=HYPERPLANE_COLOR, stroke_opacity=0.6)
@@ -234,7 +246,6 @@ class ScoreCombinationScene(MovingCameraScene):
         margin_band = Polygon(ORIGIN, ORIGIN, ORIGIN, ORIGIN, fill_color=HYPERPLANE_COLOR, fill_opacity=0.2, stroke_width=0)
         
         def _get_lines():
-            """Tính toán tọa độ các đường dựa trên góc và khoảng cách lề hiện tại."""
             a = angle_tracker.get_value()
             m = margin_tracker.get_value()
             
@@ -244,7 +255,7 @@ class ScoreCombinationScene(MovingCameraScene):
             p_center = plane.c2p(cx, cy)
             p_dir = plane.c2p(cx + dir_vec[0], cy + dir_vec[1]) - p_center
             
-            length = 15
+            length = 20 
             db_s = p_center - length * p_dir
             db_e = p_center + length * p_dir
             
@@ -253,7 +264,6 @@ class ScoreCombinationScene(MovingCameraScene):
             
             return db_s, db_e, m_offset
             
-        # Gắn Updaters
         db_line.add_updater(lambda mob: mob.put_start_and_end_on(_get_lines()[0], _get_lines()[1]))
         mp_line.add_updater(lambda mob: mob.put_start_and_end_on(_get_lines()[0] + _get_lines()[2], _get_lines()[1] + _get_lines()[2]))
         mn_line.add_updater(lambda mob: mob.put_start_and_end_on(_get_lines()[0] - _get_lines()[2], _get_lines()[1] - _get_lines()[2]))
@@ -265,24 +275,43 @@ class ScoreCombinationScene(MovingCameraScene):
 
         self.add(margin_band, db_line, mp_line, mn_line)
         
-        # ── 4. Hoạt ảnh: "Đảo" liên tục và mở rộng lề ────────────────────────
-        # Đường thẳng xoay từ sai lệch về vị trí tối ưu
-        self.play(
-            angle_tracker.animate.set_value(opt_angle - PI/6),
-            margin_tracker.animate.set_value(opt_margin * 0.5),
-            run_time=1.5, rate_func=there_and_back_with_pause
-        )
-        self.play(
-            angle_tracker.animate.set_value(opt_angle),
-            margin_tracker.animate.set_value(opt_margin),
-            run_time=2.0, rate_func=smooth
-        )
+        # Bộ đếm Iteration
+        iter_num = 1
+        iter_text = Text(f"Iteration: {iter_num}", font=FONT, font_size=24, color=YELLOW).to_corner(UR).shift(DOWN * 0.5)
+        self.play(FadeIn(iter_text))
+
+        # ── 4. Hoạt ảnh: Cỗ máy quét giật cục (Discrete Iterations) ──────────
+        test_angles = [
+            opt_angle + 30 * DEGREES, 
+            opt_angle - 15 * DEGREES, 
+            opt_angle + 5 * DEGREES, 
+            opt_angle
+        ]
         
-        # Hiệu ứng Breathing Margin (Nhấp nháy lớn nhỏ và "đụng" vào các chấm)
-        self.play(margin_tracker.animate.set_value(opt_margin * 1.25), run_time=0.4, rate_func=rush_into)
-        self.play(margin_tracker.animate.set_value(opt_margin), run_time=0.4, rate_func=rush_from)
-        self.play(margin_tracker.animate.set_value(opt_margin * 1.1), run_time=0.3, rate_func=rush_into)
-        self.play(margin_tracker.animate.set_value(opt_margin), run_time=0.3, rate_func=rush_from)
+        for angle in test_angles:
+            iter_num += 1
+            new_iter_text = Text(f"Iteration: {iter_num}", font=FONT, font_size=24, color=YELLOW).to_corner(UR).shift(DOWN * 0.5)
+            
+            self.play(
+                angle_tracker.animate.set_value(angle),
+                # FIX: Dùng ReplacementTransform để gỡ bỏ triệt để text cũ khỏi màn hình
+                ReplacementTransform(iter_text, new_iter_text),
+                run_time=0.6,
+                rate_func=linear if angle != opt_angle else smooth
+            )
+            self.wait(0.2)
+            iter_text = new_iter_text # Cập nhật con trỏ
+
+        # Khi đã tìm đúng góc, Lề (Margin) bắt đầu nở ra
+        final_iter_text = Text("Optimal Found!", font=FONT, font_size=24, color=GENUINE_COLOR).to_corner(UR).shift(DOWN * 0.5)
+        
+        self.play(
+            margin_tracker.animate.set_value(opt_margin),
+            # FIX: Tương tự, dùng ReplacementTransform
+            ReplacementTransform(iter_text, final_iter_text),
+            run_time=1.5,
+            rate_func=smooth
+        )
         
         # ── 5. Khi đụng lề chuẩn, SVs phát sáng và xuất hiện vòng tròn ───────
         sv_rings = VGroup(*[
@@ -295,20 +324,26 @@ class ScoreCombinationScene(MovingCameraScene):
             run_time=0.8
         )
         
-        # Gỡ updaters để tối ưu hóa hiệu suất vẽ
+        # ── 6. Cinematic Focus: Làm mờ điểm thừa ─────────────────────────────
+        non_sv_dots = VGroup(*[d for i, d in enumerate(dots) if i not in svm.support_])
+        self.play(non_sv_dots.animate.set_opacity(0.15), run_time=1.0)
+        
         db_line.clear_updaters()
         mp_line.clear_updaters()
         mn_line.clear_updaters()
         margin_band.clear_updaters()
         
-        # Hiển thị chú thích Support Vectors
-        sv_label = Text("Support Vectors", font=FONT, font_size=22, color=YELLOW).to_corner(UR, buff=0.5)
-        arrow = Arrow(sv_label.get_left(), sv_rings[-1].get_right(), color=YELLOW, buff=0.1)
+        # Căn chỉnh chú thích 2/||w||
+        sv_label = Text("Support Vectors", font=FONT, font_size=22, color=YELLOW).to_corner(UR, buff=0.5).shift(DOWN * 1.5)
+        arrow = Arrow(sv_label.get_bottom(), sv_rings[-1].get_top(), color=YELLOW, buff=0.1)
         formula = MathTex(r"\frac{2}{\|\mathbf{w}\|}").scale(1.2).next_to(sv_label, DOWN, buff=0.3)
         
         self.play(Write(sv_label), Create(arrow), Write(formula), run_time=1.0)
-        self.wait(2.0)
+        self.wait(2.5)
 
+    # =========================================================================
+    # PHASE 3: Application & Rescue
+    # =========================================================================
     def _phase3_application(self, axes):
         rng_crowd = np.random.default_rng(99)
         crowd_x = rng_crowd.uniform(0.35, 0.65, N_CLOUD * 2)
@@ -323,7 +358,7 @@ class ScoreCombinationScene(MovingCameraScene):
 
         self.play(self.camera.frame.animate.set_width(10), run_time=1.0, rate_func=smooth)
         
-        # Rescue Noisy Genuine
+        # ── Rescue Noisy Genuine ──
         noisy_icon = make_noisy_icon(0.35)
         noisy_start_pos = axes.c2p(0.45, 0.08)
         noisy_icon.move_to(noisy_start_pos + UP * 0.55)
@@ -342,7 +377,7 @@ class ScoreCombinationScene(MovingCameraScene):
         self.play(FadeIn(rescue_text_g, shift=LEFT * 0.1), run_time=0.5)
         self.wait(0.4)
 
-        # Rescue Spoof Impostor
+        # ── Rescue Spoof Impostor ──
         spoof_icon = make_spoof_icon(0.30)
         spoof_start_pos = axes.c2p(0.60, 0.25)
         spoof_icon.move_to(spoof_start_pos + UP * 0.5)
@@ -368,6 +403,7 @@ class ScoreCombinationScene(MovingCameraScene):
             self.camera.frame.animate.set_width(14.222), run_time=1.0,
         )
 
+        # ── Expand Crowd ──
         gen_targets = _scatter_2d((0.72, 0.75), N_CLOUD, 0.09, RNG_SEED_GEN_2D)
         imp_targets = _scatter_2d((0.27, 0.25), N_CLOUD, 0.09, RNG_SEED_IMP_2D)
         all_targets = gen_targets + imp_targets
@@ -378,32 +414,52 @@ class ScoreCombinationScene(MovingCameraScene):
         genuine_cloud = VGroup(*crowd_dots[:N_CLOUD])
         impostor_cloud = VGroup(*crowd_dots[N_CLOUD:])
 
-        # Snap SVM
+        # ── Snap Final SVM (FIX: Trimming lines and margin strictly inside axes bounds) ──
         X_data = np.array([axes.p2c(d.get_center())[:2] for d in genuine_cloud] + [axes.p2c(d.get_center())[:2] for d in impostor_cloud])
         y_data = np.array([1]*N_CLOUD + [-1]*N_CLOUD)
         clf = SVC(kernel="linear", C=1e6, random_state=42).fit(X_data, y_data)
         
         w_final = clf.coef_[0].copy()
         b_final = clf.intercept_[0]
-        margin_dist = 1.0 / np.linalg.norm(w_final)
+
+        # Thuật toán cắt tọa độ: Trả về chính xác các giao điểm của một đường thẳng với hình vuông lưới [0, 1]
+        def get_clipped_pts(w, b, offset=0):
+            pts = []
+            for x_val in [0.0, 1.0]:
+                y_val = (offset - b - w[0]*x_val) / w[1]
+                if -1e-4 <= y_val <= 1.0 + 1e-4: pts.append((x_val, y_val))
+            for y_val in [0.0, 1.0]:
+                x_val = (offset - b - w[1]*y_val) / w[0]
+                if -1e-4 <= x_val <= 1.0 + 1e-4: pts.append((x_val, y_val))
+            unique_pts = []
+            for p in pts:
+                if not any(np.linalg.norm(np.array(p) - np.array(up)) < 1e-4 for up in unique_pts):
+                    unique_pts.append(p)
+            unique_pts.sort(key=lambda p: p[0])
+            return unique_pts
+
+        hp_pts = get_clipped_pts(w_final, b_final, 0)
+        mp_pts = get_clipped_pts(w_final, b_final, 1)
+        mn_pts = get_clipped_pts(w_final, b_final, -1)
+
+        final_hp = Line(axes.c2p(*hp_pts[0]), axes.c2p(*hp_pts[1]), color=HYPERPLANE_COLOR, stroke_width=4)
+        final_mp = DashedLine(axes.c2p(*mp_pts[0]), axes.c2p(*mp_pts[1]), color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1)
+        final_mn = DashedLine(axes.c2p(*mn_pts[0]), axes.c2p(*mn_pts[1]), color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1)
+
+        # Polygon Clipping: Gom các điểm mép lề + các góc của trục tọa độ lọt thỏm bên trong lề
+        band_pts_data = []
+        band_pts_data.extend(mp_pts)
+        band_pts_data.extend(mn_pts[::-1]) # Đảo ngược danh sách lề âm để tạo vòng tròn kín
         
-        x_lo, x_hi = AXIS_RANGE[0], AXIS_RANGE[1]
-        y_s = (-w_final[0] * x_lo - b_final) / w_final[1]
-        y_e = (-w_final[0] * x_hi - b_final) / w_final[1]
-        
-        line_vec = np.array([x_hi - x_lo, y_e - y_s])
-        line_len = np.linalg.norm(line_vec)
-        perp = np.array([-line_vec[1], line_vec[0]]) / line_len
-        
-        pos_sx, pos_sy = x_lo + perp[0]*margin_dist, y_s + perp[1]*margin_dist
-        pos_ex, pos_ey = x_hi + perp[0]*margin_dist, y_e + perp[1]*margin_dist
-        neg_sx, neg_sy = x_lo - perp[0]*margin_dist, y_s - perp[1]*margin_dist
-        neg_ex, neg_ey = x_hi - perp[0]*margin_dist, y_e - perp[1]*margin_dist
-        
-        final_hp = Line(axes.c2p(x_lo, y_s), axes.c2p(x_hi, y_e), color=HYPERPLANE_COLOR, stroke_width=4)
-        final_mp = DashedLine(axes.c2p(pos_sx, pos_sy), axes.c2p(pos_ex, pos_ey), color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1)
-        final_mn = DashedLine(axes.c2p(neg_sx, neg_sy), axes.c2p(neg_ex, neg_ey), color=MARGIN_COLOR, stroke_width=2.2, dash_length=0.1)
-        final_band = Polygon(axes.c2p(pos_sx, pos_sy), axes.c2p(pos_ex, pos_ey), axes.c2p(neg_ex, neg_ey), axes.c2p(neg_sx, neg_sy), fill_color=HYPERPLANE_COLOR, fill_opacity=0.15, stroke_width=0)
+        for c in [(0.,0.), (1.,0.), (1.,1.), (0.,1.)]:
+            val = w_final[0]*c[0] + w_final[1]*c[1] + b_final
+            if -1.0 + 1e-4 < val < 1.0 - 1e-4:
+                band_pts_data.append(c)
+                
+        # Sắp xếp các điểm theo chiều kim đồng hồ để tạo mảng Polygon không bị lỗi xoắn
+        center = np.mean(band_pts_data, axis=0)
+        band_pts_data.sort(key=lambda p: np.arctan2(p[1] - center[1], p[0] - center[0]))
+        final_band = Polygon(*[axes.c2p(*p) for p in band_pts_data], fill_color=HYPERPLANE_COLOR, fill_opacity=0.15, stroke_width=0)
         
         self.play(FadeIn(final_band), Create(final_hp), Create(final_mp), Create(final_mn), run_time=1.5)
         self.play(Flash(final_hp.get_center(), color=HYPERPLANE_COLOR, flash_radius=0.5, num_lines=10), run_time=0.5)
@@ -411,56 +467,123 @@ class ScoreCombinationScene(MovingCameraScene):
         
         return genuine_cloud, impostor_cloud, final_hp
 
+    # =========================================================================
+    # PHASE 4: The XOR Trap
+    # =========================================================================
     def _phase4_xor_trap(self, axes, genuine_cloud, impostor_cloud, hyperplane):
-        flash_rect = Rectangle(width=config.frame_width + 2, height=config.frame_height + 2, fill_color=SPOOF_RED, fill_opacity=0.0, stroke_width=0)
+        # ── 1. System Alert Flash ────────────────────────────────────────────
+        flash_rect = Rectangle(
+            width=config.frame_width + 2, height=config.frame_height + 2, 
+            fill_color=SPOOF_RED, fill_opacity=0.0, stroke_width=0
+        )
         self.add(flash_rect)
         self.play(flash_rect.animate.set_fill(opacity=0.30), run_time=0.3, rate_func=there_and_back)
         self.remove(flash_rect)
 
-        warning_en = Text("Spoof Attack", font=FONT, font_size=28, weight=BOLD, color=SPOOF_RED).to_edge(UP, buff=0.30)
-        warning_vn = Text("XOR Trap!", font=FONT, font_size=22, color=SPOOF_RED).next_to(warning_en, DOWN, buff=0.10)
-        warning_bg = SurroundingRectangle(VGroup(warning_en, warning_vn), fill_color=BLACK, fill_opacity=0.75, stroke_color=SPOOF_RED, stroke_width=1.5, corner_radius=0.14, buff=0.18)
-        self.play(FadeIn(warning_bg), Write(warning_en), FadeIn(warning_vn, shift=DOWN * 0.1), run_time=0.8)
-        self.wait(0.4)
+        # ── 2. Top Warning Banner ────────────────────────────────────────────
+        warning_en = Text("Spoof Attack", font=FONT, font_size=28, weight=BOLD, color=SPOOF_RED).to_edge(UP, buff=0.25)
+        warning_vn = Text("XOR Trap!", font=FONT, font_size=20, color=SPOOF_RED).next_to(warning_en, DOWN, buff=0.10)
+        warning_bg = SurroundingRectangle(
+            VGroup(warning_en, warning_vn), fill_color=BLACK, fill_opacity=0.85, 
+            stroke_color=SPOOF_RED, stroke_width=2, corner_radius=0.1, buff=0.2
+        )
+        warning_group = VGroup(warning_bg, warning_en, warning_vn)
+        
+        self.play(FadeIn(warning_bg), Write(warning_en), FadeIn(warning_vn, shift=DOWN * 0.1), run_time=0.7)
+        self.play(Wiggle(warning_group, scale_value=1.05), run_time=0.5)
 
+        # ── 3. Inject Spoof Clusters (XOR Layout) ────────────────────────────
         spoof_tl_pts = _scatter_2d((0.27, 0.75), N_CLOUD // 2, 0.08, RNG_SEED_SPOOF_TL)
         spoof_tl = VGroup(*[Dot(axes.c2p(x, y), color=IMPOSTOR_COLOR, radius=0.09) for x, y in spoof_tl_pts])
+        
         spoof_br_pts = _scatter_2d((0.72, 0.25), N_CLOUD // 2, 0.08, RNG_SEED_SPOOF_BR)
         spoof_br = VGroup(*[Dot(axes.c2p(x, y), color=IMPOSTOR_COLOR, radius=0.09) for x, y in spoof_br_pts])
 
-        tl_caption = Text("Silicone fingerprint", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
-        tl_caption_bg = SurroundingRectangle(tl_caption, fill_color=BG_COLOR, fill_opacity=0.7, stroke_width=0, buff=0.06)
-        tl_cap_group = VGroup(tl_caption_bg, tl_caption).next_to(spoof_tl, RIGHT, buff=0.15)
+        # Negative Space Labeling
+        tl_caption = Text("Silicone fingerprint\n(Giả mạo vân tay)", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
+        tl_caption_bg = SurroundingRectangle(tl_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.08)
+        tl_cap_group = VGroup(tl_caption_bg, tl_caption).next_to(spoof_tl, LEFT, buff=0.25)
         
-        br_caption = Text("3D face mask", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
-        br_caption_bg = SurroundingRectangle(br_caption, fill_color=BG_COLOR, fill_opacity=0.7, stroke_width=0, buff=0.06)
-        br_cap_group = VGroup(br_caption_bg, br_caption).next_to(spoof_br, LEFT, buff=0.15)
+        br_caption = Text("3D face mask\n(Mặt nạ khuôn mặt)", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
+        br_caption_bg = SurroundingRectangle(br_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.08)
+        br_cap_group = VGroup(br_caption_bg, br_caption).next_to(spoof_br, RIGHT, buff=0.25)
 
-        self.play(LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_tl], lag_ratio=0.07), LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_br], lag_ratio=0.07), run_time=1.0)
-        self.play(FadeIn(tl_cap_group, shift=LEFT * 0.12), FadeIn(br_cap_group, shift=RIGHT * 0.12), run_time=0.5)
+        self.play(
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_tl], lag_ratio=0.05), 
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_br], lag_ratio=0.05), 
+            run_time=1.0
+        )
+        self.play(FadeIn(tl_cap_group, shift=RIGHT * 0.1), FadeIn(br_cap_group, shift=LEFT * 0.1), run_time=0.5)
         self.wait(0.5)
 
+        # ── 4. Hyperplane Failure Animation ──────────────────────────────────
         angle_tracker = ValueTracker(0)
         c_yellow = ManimColor(HYPERPLANE_COLOR)
         c_red = ManimColor(SPOOF_RED)
 
         def _hp_updater(line):
             a = angle_tracker.get_value()
-            cx = axes.c2p(0.5, 0.5)
-            dir_vec = np.array([np.cos(a), np.sin(a), 0.0])
-            line.put_start_and_end_on(cx - 3.5 * dir_vec, cx + 3.5 * dir_vec)
+            c, s = np.cos(a), np.sin(a)
+            pts = []
+            
+            if abs(c) > 1e-5:
+                y0 = 0.5 + (0 - 0.5) * s / c
+                if 0 <= y0 <= 1: pts.append((0.0, y0))
+                y1 = 0.5 + (1 - 0.5) * s / c
+                if 0 <= y1 <= 1: pts.append((1.0, y1))
+            if abs(s) > 1e-5:
+                x0 = 0.5 + (0 - 0.5) * c / s
+                if 0 <= x0 <= 1: pts.append((x0, 0.0))
+                x1 = 0.5 + (1 - 0.5) * c / s
+                if 0 <= x1 <= 1: pts.append((x1, 1.0))
+            
+            unique_pts = []
+            for p in pts:
+                if not any(np.linalg.norm(np.array(p) - np.array(up)) < 1e-4 for up in unique_pts):
+                    unique_pts.append(p)
+            
+            if len(unique_pts) >= 2:
+                line.put_start_and_end_on(axes.c2p(*unique_pts[0]), axes.c2p(*unique_pts[1]))
+                
             t = (np.sin(a * 6) + 1) / 2
             line.set_color(interpolate_color(c_yellow, c_red, t))
-            line.set_stroke(width=3 + 3 * t)
+            line.set_stroke(width=3 + 5 * t)
 
         hyperplane.add_updater(_hp_updater)
-        self.play(angle_tracker.animate.set_value(PI * 1.4), run_time=2.5, rate_func=linear)
+        self.play(angle_tracker.animate.set_value(PI * 1.5), run_time=2.5, rate_func=linear)
         hyperplane.remove_updater(_hp_updater)
-        self.play(hyperplane.animate.set_color(SPOOF_RED).set_stroke(opacity=0.35), run_time=0.5)
         
-        failure_text = Text("Linear model fails!", font=FONT, font_size=20, weight=BOLD, color=SPOOF_RED).to_edge(DOWN)
-        self.play(Write(failure_text))
-        self.wait(1.5)
+        # ── 5. Background Dimming & Center Error Modal ───────────────────────
+        self.play(
+            hyperplane.animate.set_color(SPOOF_RED).set_stroke(width=5, opacity=0.6),
+            VGroup(genuine_cloud, impostor_cloud, spoof_tl, spoof_br, axes, tl_cap_group, br_cap_group).animate.set_opacity(0.25),
+            run_time=0.4
+        )
+        
+        cross_size = 0.35
+        cross = VGroup(
+            Line(UL * cross_size, DR * cross_size, color=SPOOF_RED, stroke_width=5),
+            Line(UR * cross_size, DL * cross_size, color=SPOOF_RED, stroke_width=5)
+        )
+        failure_text = Text("Linear Model Fails!", font=FONT, font_size=26, weight=BOLD, color=SPOOF_RED)
+        modal_content = VGroup(cross, failure_text).arrange(RIGHT, buff=0.3)
+        
+        failure_bg = SurroundingRectangle(
+            modal_content, fill_color=BLACK, fill_opacity=0.95, 
+            stroke_color=SPOOF_RED, stroke_width=2.5, corner_radius=0.15, buff=0.3
+        )
+        
+        # Centering the modal directly in the middle of the axes space
+        failure_modal = VGroup(failure_bg, modal_content).move_to(axes.c2p(0.5, 0.5))
+        
+        self.play(FadeIn(failure_modal, scale=1.2), run_time=0.6)
+        self.play(
+            Flash(failure_modal, color=SPOOF_RED, flash_radius=2.5, num_lines=15),
+            Wiggle(warning_group, scale_value=1.1),
+            run_time=0.6
+        )
+        self.wait(2.0)
 
+        # ── 6. Scene Cleanup ─────────────────────────────────────────────────
         self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.5)
         self.wait(0.5)
