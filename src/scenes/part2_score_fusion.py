@@ -1,4 +1,4 @@
-"""Scene 3 — Score Combination & Linear SVM
+"""Score Combination & Linear SVM
 
 Phase 1 (0:00-0:20): Biometric Vectorization (Split-screen -> Score Vector)
 Phase 2 (0:20-0:50): The "Math Class" Detour (Abstract dataset, iterative SVM learning)
@@ -503,15 +503,15 @@ class ScoreCombinationScene(MovingCameraScene):
         self.remove(flash_rect)
 
         # 2. Warning Title Banner (Top Center)
-        warning_en = Text("Spoof Attack", font=FONT, font_size=28, weight=BOLD, color=SPOOF_RED).to_edge(UP, buff=0.30)
-        warning_vn = Text("XOR Trap!", font=FONT, font_size=22, color=SPOOF_RED).next_to(warning_en, DOWN, buff=0.10)
+        warning_en = Text("Spoof Attack", font=FONT, font_size=28, weight=BOLD, color=SPOOF_RED).to_edge(UP, buff=0.25)
+        warning_vn = Text("Non-linear Trap!", font=FONT, font_size=20, color=SPOOF_RED).next_to(warning_en, DOWN, buff=0.10)
         warning_bg = SurroundingRectangle(
-            VGroup(warning_en, warning_vn), fill_color=BLACK, fill_opacity=0.75, 
-            stroke_color=SPOOF_RED, stroke_width=1.5, corner_radius=0.14, buff=0.18
+            VGroup(warning_en, warning_vn), fill_color=BLACK, fill_opacity=0.85, 
+            stroke_color=SPOOF_RED, stroke_width=2, corner_radius=0.1, buff=0.2
         )
         warning_group = VGroup(warning_bg, warning_en, warning_vn)
         
-        self.play(FadeIn(warning_bg), Write(warning_en), FadeIn(warning_vn, shift=DOWN * 0.1), run_time=0.8)
+        self.play(FadeIn(warning_bg), Write(warning_en), FadeIn(warning_vn, shift=DOWN * 0.1), run_time=0.7)
         self.play(Wiggle(warning_group, scale_value=1.05), run_time=0.5)
 
         # 3. Inject Spoof Clusters (XOR Layout)
@@ -521,6 +521,9 @@ class ScoreCombinationScene(MovingCameraScene):
         spoof_br_pts = _scatter_2d((0.72, 0.25), N_CLOUD // 2, 0.08, RNG_SEED_SPOOF_BR)
         spoof_br = VGroup(*[Dot(axes.c2p(x, y), color=IMPOSTOR_COLOR, radius=0.09) for x, y in spoof_br_pts])
 
+        spoof_tr_pts = _scatter_2d((0.94, 0.94), N_CLOUD // 2, 0.04, 42, x_clip=(0.88, 1.0), y_clip=(0.88, 1.0))
+        spoof_tr = VGroup(*[Dot(axes.c2p(x, y), color=IMPOSTOR_COLOR, radius=0.09) for x, y in spoof_tr_pts])
+
         # 4. Negative Space Labeling
         tl_caption = Text("Silicone fingerprint", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
         tl_caption_bg = SurroundingRectangle(tl_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.08)
@@ -528,17 +531,22 @@ class ScoreCombinationScene(MovingCameraScene):
         
         br_caption = Text("3D face mask", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
         br_caption_bg = SurroundingRectangle(br_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.08)
-        br_cap_group = VGroup(br_caption_bg, br_caption).next_to(spoof_br, RIGHT, buff=0.25)
+        br_cap_group = VGroup(br_caption_bg, br_caption).next_to(spoof_br, DOWN, buff=0.15)
+
+        tr_caption = Text("Deepfake + Masterprint", font=FONT, font_size=13, color=IMPOSTOR_COLOR)
+        tr_caption_bg = SurroundingRectangle(tr_caption, fill_color=BG_COLOR, fill_opacity=0.85, stroke_width=0, buff=0.08)
+        tr_cap_group = VGroup(tr_caption_bg, tr_caption).next_to(spoof_tr, LEFT, buff=0.15)
 
         self.play(
             LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_tl], lag_ratio=0.05), 
             LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_br], lag_ratio=0.05), 
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in spoof_tr], lag_ratio=0.05),
             run_time=1.0
         )
-        
         self.play(
-            FadeIn(tl_cap_group, shift=DOWN * 0.1), 
-            FadeIn(br_cap_group, shift=RIGHT * 0.1), 
+            FadeIn(tl_cap_group, shift=RIGHT * 0.1), 
+            FadeIn(br_cap_group, shift=UP * 0.1), 
+            FadeIn(tr_cap_group, shift=RIGHT * 0.1), 
             run_time=0.5
         )
         self.wait(0.5)
@@ -583,7 +591,7 @@ class ScoreCombinationScene(MovingCameraScene):
         # 6. Background Dimming & Center Error Modal
         self.play(
             hyperplane.animate.set_color(SPOOF_RED).set_stroke(width=5, opacity=0.6),
-            VGroup(genuine_cloud, impostor_cloud, spoof_tl, spoof_br, axes, tl_cap_group, br_cap_group).animate.set_opacity(0.25),
+            VGroup(genuine_cloud, impostor_cloud, spoof_tl, spoof_br, spoof_tr, axes, tl_cap_group, br_cap_group, tr_cap_group).animate.set_opacity(0.25),
             run_time=0.4
         )
         
