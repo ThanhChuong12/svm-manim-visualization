@@ -364,6 +364,7 @@ class IntroScene(ThreeDScene):
         ).shift(DOWN * 0.15)
 
         self.play(ReplacementTransform(axes_2d, axes3d), run_time=0.7)
+        self.add_fixed_orientation_mobjects(*blue_dots, *red_dots)
 
         lift_anims = []
         trace_lines = VGroup()
