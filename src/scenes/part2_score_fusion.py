@@ -551,43 +551,12 @@ class ScoreCombinationScene(MovingCameraScene):
         )
         self.wait(0.5)
 
-        # 5. Frantic Boundary Rotation Animation
-        angle_tracker = ValueTracker(0)
-        c_yellow = ManimColor(HYPERPLANE_COLOR)
-        c_red = ManimColor(SPOOF_RED)
+        # 5. Instant failure reveal — brutal cut, no rotation
+        self.play(
+            hyperplane.animate.set_color(SPOOF_RED).set_stroke(width=6, opacity=0.9),
+            run_time=0.2,
+        )
 
-        def _hp_updater(line):
-            a = angle_tracker.get_value()
-            c, s = np.cos(a), np.sin(a)
-            pts = []
-            
-            if abs(c) > 1e-5:
-                y0 = 0.5 + (0 - 0.5) * s / c
-                if 0 <= y0 <= 1: pts.append((0.0, y0))
-                y1 = 0.5 + (1 - 0.5) * s / c
-                if 0 <= y1 <= 1: pts.append((1.0, y1))
-            if abs(s) > 1e-5:
-                x0 = 0.5 + (0 - 0.5) * c / s
-                if 0 <= x0 <= 1: pts.append((x0, 0.0))
-                x1 = 0.5 + (1 - 0.5) * c / s
-                if 0 <= x1 <= 1: pts.append((x1, 1.0))
-            
-            unique_pts = []
-            for p in pts:
-                if not any(np.linalg.norm(np.array(p) - np.array(up)) < 1e-4 for up in unique_pts):
-                    unique_pts.append(p)
-            
-            if len(unique_pts) >= 2:
-                line.put_start_and_end_on(axes.c2p(*unique_pts[0]), axes.c2p(*unique_pts[1]))
-                
-            t = (np.sin(a * 6) + 1) / 2
-            line.set_color(interpolate_color(c_yellow, c_red, t))
-            line.set_stroke(width=3 + 5 * t)
-
-        hyperplane.add_updater(_hp_updater)
-        self.play(angle_tracker.animate.set_value(PI * 1.5), run_time=2.5, rate_func=linear)
-        hyperplane.remove_updater(_hp_updater)
-        
         # 6. Background Dimming & Center Error Modal
         self.play(
             hyperplane.animate.set_color(SPOOF_RED).set_stroke(width=5, opacity=0.6),
