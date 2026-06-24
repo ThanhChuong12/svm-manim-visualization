@@ -475,13 +475,8 @@ class UnibiometricsScene(Scene):
         )
 
     def _phase4_transition(self, axes: Axes, x_axis_label: Text) -> None:
-        """Bridge from 1D failure to the full pipeline question.
-
-        Shows that adding a 2nd modality is NOT just stacking axes — we need
-        to understand HOW scores are produced and normalized first.
-        This transition leads naturally into Part 1.5 (Pipeline Walkthrough).
-        """
-        # ── Step 1: grow the Y axis to suggest 2D space ───────────────────
+        """Bridge from 1D failure to the 2D pipeline question."""
+        # Grow Y axis to suggest 2D space
         y_axis_arrow = Arrow(
             start=axes.c2p(0, 0),
             end=axes.c2p(0, 1.22),
@@ -499,7 +494,7 @@ class UnibiometricsScene(Scene):
         )
         self.wait(0.4)
 
-        # ── Step 2: a point "pops in" as if it just got both scores ────────
+        # Animate a point receiving both scores
         demo_dot = Dot(axes.c2p(1.5, 0.0), color="#2ECC71", radius=0.09)
         self.play(FadeIn(demo_dot, scale=0.4), run_time=0.5)
 
@@ -516,7 +511,7 @@ class UnibiometricsScene(Scene):
         )
         self.wait(0.5)
 
-        # ── Step 3: "Wait — but WHERE do these scores come from?" ──────────
+        # Display question box
         question_box = RoundedRectangle(
             width=7.8, height=1.05, corner_radius=0.18,
             fill_color=BG_COLOR, fill_opacity=0.94,
@@ -541,7 +536,7 @@ class UnibiometricsScene(Scene):
         self.play(FadeIn(q_line2, shift=DOWN * 0.10), run_time=0.6)
         self.wait(1.6)
 
-        # ── Step 4: fade everything — cut to Part 1.5 ─────────────────────
+        # Fade out and cut to next part
         tracking_line.clear_updaters()
         self.play(
             *[FadeOut(m) for m in self.mobjects],
