@@ -199,12 +199,12 @@ class UnibiometricsScene(Scene):
         self._gen_curve = gen_curve
         self._gen_fill  = gen_fill
 
-        imp_lbl = Text("Kẻ mạo danh", font=FONT, font_size=20, color=IMPOSTOR_COLOR)
+        imp_lbl = Text("Impostors", font=FONT, font_size=20, color=IMPOSTOR_COLOR)
         imp_lbl.add_updater(lambda m: m.move_to(
             np.array([axes.c2p(mu_imp.get_value() - 1.2, 0)[0], LABEL_Y_WORLD, 0])
         ))
         
-        gen_lbl = Text("Người dùng hợp lệ", font=FONT, font_size=20, color=GENUINE_COLOR)
+        gen_lbl = Text("Genuine Users", font=FONT, font_size=20, color=GENUINE_COLOR)
         gen_lbl.add_updater(lambda m: m.move_to(
             np.array([axes.c2p(mu_gen.get_value() + 1.2, 0)[0], LABEL_Y_WORLD, 0])
         ))
@@ -216,13 +216,13 @@ class UnibiometricsScene(Scene):
         gen_icon = make_genuine_icon(icon_size)
         gen_icon.move_to(axes.c2p(3.0, PEAK_Y) + UP * ICON_LIFT)
         gen_icon_lbl = Text(
-            "Người hợp lệ", font=FONT, font_size=13, color=GENUINE_COLOR,
+            "Genuine", font=FONT, font_size=13, color=GENUINE_COLOR,
         ).next_to(gen_icon, DOWN, buff=0.08)
 
         imp_icon = make_impostor_icon(icon_size)
         imp_icon.move_to(axes.c2p(-3.0, PEAK_Y) + UP * ICON_LIFT)
         imp_icon_lbl = Text(
-            "Kẻ tấn công", font=FONT, font_size=13, color=IMPOSTOR_COLOR,
+            "Impostor", font=FONT, font_size=13, color=IMPOSTOR_COLOR,
         ).next_to(imp_icon, DOWN, buff=0.08)
 
         self._gen_icon     = gen_icon
@@ -254,7 +254,7 @@ class UnibiometricsScene(Scene):
         gen_curve = self._gen_curve
         gen_fill  = self._gen_fill
 
-        reality_tag = Text("Thực tế (Reality)", font=FONT, font_size=18,
+        reality_tag = Text("Reality", font=FONT, font_size=18,
                            color=HYPERPLANE_COLOR).to_corner(UR, buff=0.5)
         self.play(FadeIn(reality_tag, shift=LEFT * 0.3), run_time=0.8)
 
@@ -274,7 +274,7 @@ class UnibiometricsScene(Scene):
         noisy_icon = make_noisy_icon(0.40)
         noisy_icon.move_to(axes.c2p(noisy_x, PEAK_Y) + UP * ICON_LIFT)
         noisy_lbl = Text(
-            "Ảnh nhiễu (Noise)", font=FONT, font_size=13, color="#888888",
+            "Noisy Sample", font=FONT, font_size=13, color="#888888",
         ).next_to(noisy_icon, DOWN, buff=0.08)
 
         self.play(
@@ -289,7 +289,7 @@ class UnibiometricsScene(Scene):
         spoof_icon = make_spoof_icon(0.40)
         spoof_icon.move_to(axes.c2p(spoof_x, PEAK_Y) + UP * ICON_LIFT)
         spoof_lbl = Text(
-            "Tấn công giả mạo (Spoof)", font=FONT, font_size=13,
+            "Spoof Attack", font=FONT, font_size=13,
             color=IMPOSTOR_COLOR,
         ).next_to(spoof_icon, DOWN, buff=0.08)
 
@@ -321,7 +321,7 @@ class UnibiometricsScene(Scene):
 
         inter_world_y = axes.c2p(0.0, scaled_gaussian(0.0, -1.0, SIGMA_REAL))[1]
         confusion_text = Text(
-            "Vùng nhiễu", font=FONT, font_size=15, color=OVERLAP_COLOR,
+            "Confusion Zone", font=FONT, font_size=15, color=OVERLAP_COLOR,
         ).move_to(axes.c2p(0.0, PEAK_Y + 0.25))
         
         confusion_arrow = Arrow(
@@ -391,10 +391,10 @@ class UnibiometricsScene(Scene):
 
         spoof_tail = make_spoof_icon(0.38)
         spoof_tail.move_to(axes.c2p(0.5, PEAK_Y) + UP * ICON_LIFT)
-        spoof_tail_lbl = Text("Spoof vượt ngưỡng!", font=FONT, font_size=12,
+        spoof_tail_lbl = Text("Spoof accepted!", font=FONT, font_size=12,
                                color=IMPOSTOR_COLOR).next_to(spoof_tail, DOWN, buff=0.08)
 
-        far_badge = _make_warning_badge("False Accept\n(Nhận nhầm kẻ gian)", IMPOSTOR_COLOR)
+        far_badge = _make_warning_badge("False Accept\n(FAR Error)", IMPOSTOR_COLOR)
         far_badge.move_to(axes.c2p(5.5, 0.85))
 
         self.play(FadeIn(far_fill), run_time=0.35)
@@ -431,10 +431,10 @@ class UnibiometricsScene(Scene):
 
         noisy_tail = make_noisy_icon(0.38)
         noisy_tail.move_to(axes.c2p(-0.5, PEAK_Y) + UP * ICON_LIFT)
-        noisy_tail_lbl = Text("Ảnh nhiễu bị từ chối!", font=FONT, font_size=12,
+        noisy_tail_lbl = Text("Genuine rejected!", font=FONT, font_size=12,
                                color=GENUINE_COLOR).next_to(noisy_tail, DOWN, buff=0.08)
 
-        frr_badge = _make_warning_badge("False Reject\n(Từ chối người thật)", GENUINE_COLOR)
+        frr_badge = _make_warning_badge("False Reject\n(FRR Error)", GENUINE_COLOR)
         frr_badge.move_to(axes.c2p(-5.5, 0.85))
 
         self.play(FadeIn(frr_fill), run_time=0.35)
@@ -475,51 +475,76 @@ class UnibiometricsScene(Scene):
         )
 
     def _phase4_transition(self, axes: Axes, x_axis_label: Text) -> None:
-        """Transition from 1D to 2D with a coordinate lift effect."""
+        """Bridge from 1D failure to the full pipeline question.
 
+        Shows that adding a 2nd modality is NOT just stacking axes — we need
+        to understand HOW scores are produced and normalized first.
+        This transition leads naturally into Part 1.5 (Pipeline Walkthrough).
+        """
+        # ── Step 1: grow the Y axis to suggest 2D space ───────────────────
         y_axis_arrow = Arrow(
             start=axes.c2p(0, 0),
-            end=axes.c2p(0, 1.25),
-            color=WHITE,
-            stroke_width=2.5,
-            buff=0,
-            max_tip_length_to_length_ratio=0.1,
+            end=axes.c2p(0, 1.22),
+            color=WHITE, stroke_width=2.5, buff=0,
+            max_tip_length_to_length_ratio=0.10,
         )
-
-        y_label = Text("Fingerprint Score", font=FONT, font_size=15, color=SLATE_GRAY)
-        y_label.rotate(PI / 2).next_to(y_axis_arrow, LEFT, buff=0.25).shift(DOWN * 0.2)
+        y_label = Text(
+            "Fingerprint Score", font=FONT, font_size=15, color=SLATE_GRAY,
+        ).rotate(PI / 2).next_to(y_axis_arrow, LEFT, buff=0.25).shift(DOWN * 0.2)
 
         self.play(
             GrowArrow(y_axis_arrow),
-            FadeIn(y_label, shift=RIGHT * 0.2),
-            run_time=1.5,
+            FadeIn(y_label, shift=RIGHT * 0.15),
+            run_time=1.4,
         )
-        self.wait(0.5)
+        self.wait(0.4)
 
-        demo_dot = Dot(axes.c2p(1.5, 0), color=GENUINE_COLOR, radius=0.08)
-        demo_lbl = Text("Add fingerprint evidence", font=FONT, font_size=13, color=GENUINE_COLOR)
-        
-        demo_lbl.add_updater(lambda m: m.next_to(demo_dot, UR, buff=0.15))
-
-        self.play(FadeIn(demo_dot), FadeIn(demo_lbl), run_time=0.8)
+        # ── Step 2: a point "pops in" as if it just got both scores ────────
+        demo_dot = Dot(axes.c2p(1.5, 0.0), color="#2ECC71", radius=0.09)
+        self.play(FadeIn(demo_dot, scale=0.4), run_time=0.5)
 
         tracking_line = always_redraw(lambda: DashedLine(
             start=axes.c2p(1.5, 0),
             end=demo_dot.get_center(),
-            color=GENUINE_COLOR, stroke_width=1.5, dash_length=0.05
-        ).set_opacity(0.6))
-        
+            color="#2ECC71", stroke_width=1.4, dash_length=0.05,
+        ).set_opacity(0.55))
         self.add(tracking_line)
 
         self.play(
-            demo_dot.animate.move_to(axes.c2p(1.5, 0.9)),
-            run_time=2.0,
-            rate_func=smooth
+            demo_dot.animate.move_to(axes.c2p(1.5, 0.88)),
+            run_time=1.8, rate_func=smooth,
         )
-        self.wait(1.2)
+        self.wait(0.5)
 
-        demo_lbl.clear_updaters()
+        # ── Step 3: "Wait — but WHERE do these scores come from?" ──────────
+        question_box = RoundedRectangle(
+            width=7.8, height=1.05, corner_radius=0.18,
+            fill_color=BG_COLOR, fill_opacity=0.94,
+            stroke_color="#F9DC5C", stroke_width=1.5,
+        ).to_edge(UP, buff=0.15)
+
+        q_line1 = Text(
+            "But where do these scores come from?",
+            font=FONT, font_size=26, color="#F9DC5C",
+        ).move_to(question_box.get_center() + UP * 0.16)
+
+        q_line2 = Text(
+            "And why normalize before fusion?",
+            font=FONT, font_size=17, color=SLATE_GRAY,
+        ).move_to(question_box.get_center() + DOWN * 0.22)
+
+        self.play(
+            FadeIn(question_box, shift=DOWN * 0.12),
+            run_time=0.55,
+        )
+        self.play(Write(q_line1), run_time=0.9)
+        self.play(FadeIn(q_line2, shift=DOWN * 0.10), run_time=0.6)
+        self.wait(1.6)
+
+        # ── Step 4: fade everything — cut to Part 1.5 ─────────────────────
         tracking_line.clear_updaters()
-
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.5)
+        self.play(
+            *[FadeOut(m) for m in self.mobjects],
+            run_time=1.4,
+        )
         self.wait(0.5)

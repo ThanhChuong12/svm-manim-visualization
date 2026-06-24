@@ -551,7 +551,7 @@ class ScoreCombinationScene(MovingCameraScene):
         )
         self.wait(0.5)
 
-        # 5. Instant failure reveal — brutal cut, no rotation
+        # 5. Instant failure reveal
         self.play(
             hyperplane.animate.set_color(SPOOF_RED).set_stroke(width=6, opacity=0.9),
             run_time=0.2,
