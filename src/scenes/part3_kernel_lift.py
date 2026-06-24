@@ -1,14 +1,4 @@
-"""The Kernel Trick & RBF SVM.
-
-Phase 1: Non-linear siege — concentric data, linear SVM fails.
-Phase 2: RBF kernel formula + 3D Gaussian lift.
-Phase 3: Laser slicing plane descends + hemisphere dome shield.
-Phase 4: Project back to 2D + circular decision boundary.
-Phase 5: Gamma slider — underfitting vs overfitting.
-Phase 6: Split-screen Linear vs RBF comparison.
-
-System limitations (Cost / Latency / Privacy) are in part4_conclusion.py.
-"""
+"""The Kernel Trick & RBF SVM scene."""
 
 import os
 import sys
@@ -60,7 +50,7 @@ except ImportError:
         return inner, outer
 
 
-# ── Scene-local design tokens ─────────────────────────────────────────────────
+# Scene-local design tokens
 FONT             = FONT_MAIN
 LASER_YELLOW     = HYPERPLANE_COLOR
 SPOOF_RED        = "#FF2222"
@@ -89,12 +79,9 @@ def _rbf_decision_radius(gamma: float) -> float:
     return float(np.sqrt(-np.log(LASER_Z_HEIGHT) / gamma))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Main Scene
-# ─────────────────────────────────────────────────────────────────────────────
-
 class KernelTrickScene(ThreeDScene):
-    """Non-linear Siege → Kernel Lift → Laser Shield → 2D Projection → Gamma → Compare → Limits."""
+    """Non-linear Siege -> Kernel Lift -> Laser Shield -> 2D Projection -> Gamma -> Compare -> Limits."""
 
     def construct(self):
         self.camera.background_color = BG_COLOR
@@ -102,7 +89,7 @@ class KernelTrickScene(ThreeDScene):
 
         inner_pts, outer_pts = _generate_circle_data()
 
-        # Truyền dữ liệu tĩnh (inner_pts, outer_pts) đi xuyên suốt các Phase để khóa tọa độ toán học
+        # Pass static data (inner_pts, outer_pts) across phases to lock mathematical coordinates
         axes_2d, green_dots, red_dots = self._phase1_nonlinear_siege(inner_pts, outer_pts)
         axes_3d = self._phase2_kernel_lift(axes_2d, green_dots, red_dots, inner_pts, outer_pts)
         self._phase3_laser_shield(axes_3d, green_dots, red_dots, inner_pts, outer_pts)
@@ -112,11 +99,9 @@ class KernelTrickScene(ThreeDScene):
         self._phase6_split_comparison(inner_pts, outer_pts)
 
 
-    # =========================================================================
     # PHASE 1 — The Non-linear Siege
-    # =========================================================================
     def _phase1_nonlinear_siege(self, inner_pts: list, outer_pts: list) -> tuple:
-        # FIX: Dời trục vừa phải (DOWN * 0.5) để 2D và 3D đồng bộ tâm khung hình
+        # Sync 2D and 3D visual centers
         axes_2d = Axes(
             x_range=XY_RANGE, y_range=XY_RANGE,
             x_length=AXIS_LEN_XY, y_length=AXIS_LEN_XY,
@@ -196,9 +181,8 @@ class KernelTrickScene(ThreeDScene):
 
         return axes_2d, green_dots, red_dots
 
-    # =========================================================================
+
     # PHASE 2 — The Kernel Lift
-    # =========================================================================
     def _phase2_kernel_lift(self, axes_2d, green_dots, red_dots, inner_pts, outer_pts) -> ThreeDAxes:
         formula = MathTex(r"K(\mathbf{x}, \mathbf{l}) = e^{-\gamma \|\mathbf{x} - \mathbf{l}\|^2}", font_size=34, color=HYPERPLANE_COLOR)
         formula_label = Text("Radial Basis Function (RBF) Kernel", font=FONT, font_size=16, color=SLATE_GRAY)
@@ -226,8 +210,7 @@ class KernelTrickScene(ThreeDScene):
 
         self.play(ReplacementTransform(axes_2d, axes_3d), run_time=0.8)
 
-        # FIX TOÁN HỌC TỐI THƯỢNG: Zip trực tiếp mảng gốc (inner_pts, outer_pts) với Dot
-        # Chấm dứt hoàn toàn sự sai lệch do nội suy ngược p2c
+        # Animate dots mapping to their computed 3D positions
         lift_anims = []
         trace_lines = VGroup()
         for dots_grp, pts_grp, color in [(green_dots, inner_pts, GENUINE_COLOR), (red_dots, outer_pts, IMPOSTOR_COLOR)]:
@@ -239,9 +222,7 @@ class KernelTrickScene(ThreeDScene):
                 trace_lines.add(trace)
                 lift_anims.append(d.animate.move_to(target_pos))
 
-        # frame_center shifts the camera's look-at point to the visual midpoint of the
-        # lifted cloud (approx. math z=0.7), pulling the scene into vertical center.
-        # axes_3d is at [0.5, -0.5, 0] world; z=0.55 in world ≈ math z=0.85 on the z-axis.
+        # Shift camera look-at point to visually center the 3D data cloud
         _fc = axes_3d.get_center() + np.array([0.0, 0.0, 0.55])
         self.move_camera(
             phi=70 * DEGREES, theta=-40 * DEGREES,
@@ -265,15 +246,12 @@ class KernelTrickScene(ThreeDScene):
         self.move_camera(theta=15  * DEGREES, run_time=2.0, rate_func=smooth)
         self.move_camera(theta=-35 * DEGREES, run_time=1.5, rate_func=smooth)
 
-        # Clear UI gọn gàng để nhường chỗ cho Phase 3
         self.play(FadeOut(formula_block), FadeOut(mapping_tex), FadeOut(z_label), run_time=0.6)
         self.wait(0.2)
 
         return axes_3d
 
-    # =========================================================================
     # PHASE 3 — The Laser Shield
-    # =========================================================================
     def _phase3_laser_shield(self, axes_3d, green_dots, red_dots, inner_pts, outer_pts) -> None:
         shield_title = Text("The Hyperplane in Feature Space", font=FONT, font_size=20, color=HYPERPLANE_COLOR)
         self.add_fixed_in_frame_mobjects(shield_title)
@@ -306,9 +284,7 @@ class KernelTrickScene(ThreeDScene):
         )
         self.add(static_plane)
 
-        # Dome: base radius is derived from the actual data spread (not just the analytic
-        # RBF boundary) to guarantee it visually encloses ALL genuine (inner) dots.
-        # A 15 % margin and a slight base-lift separate it cleanly from the laser plane.
+        # Dome radius ensures it visually encloses all genuine data points
         inner_max_r = max(np.sqrt(pt[0]**2 + pt[1]**2) for pt in inner_pts)
         dome_base_r = max(inner_max_r, _rbf_decision_radius(GAMMA)) * 1.18
         dome_peak   = _Z_SCALE                   # apex at top of z-range
@@ -330,7 +306,6 @@ class KernelTrickScene(ThreeDScene):
         self.play(FadeIn(dome), run_time=1.5)
         self.play(*[Flash(d.get_center(), color=GENUINE_COLOR, flash_radius=0.2, num_lines=5) for d in green_dots[:8]], run_time=0.8)
 
-        # Markers centered directly on each 3D dot (no positional offset).
         reject_markers = VGroup()
         for d, pt in zip(red_dots, outer_pts):
             z_math = _rbf_z(pt[0], pt[1], GAMMA) * _Z_SCALE
@@ -365,14 +340,11 @@ class KernelTrickScene(ThreeDScene):
         self._shield_badge_block = shield_badge_block
         self._shield_title = shield_title
 
-    # =========================================================================
     # PHASE 4 — Projection Back to 2D
-    # =========================================================================
     def _phase4_projection_back(self, axes_3d, green_dots, red_dots, inner_pts, outer_pts) -> None:
         proj_title = Text("Project Decision Boundary to 2D", font=FONT, font_size=22, color=HYPERPLANE_COLOR).to_edge(UP, buff=0.35)
         self.add_fixed_in_frame_mobjects(proj_title)
         
-        # FIX TEXT: Fade mượt mà tránh đè chữ
         self.play(FadeOut(self._shield_title), FadeIn(proj_title), run_time=0.8)
 
         # Reset frame_center: going toward top-down so look at axes XY floor.
@@ -383,7 +355,7 @@ class KernelTrickScene(ThreeDScene):
             run_time=2.5, rate_func=smooth,
         )
 
-        # FIX TOÁN HỌC: Lấy lại tọa độ gốc ép thẳng xuống z=0
+        # Project 3D points back to the 2D plane
         proj_anims = []
         trace_lines = VGroup()
         for dots_grp, pts_grp, color in [(green_dots, inner_pts, GENUINE_COLOR), (red_dots, outer_pts, IMPOSTOR_COLOR)]:
@@ -416,7 +388,6 @@ class KernelTrickScene(ThreeDScene):
         boundary_label = Text("Decision Boundary (RBF)", font=FONT, font_size=18, weight=BOLD, color=HYPERPLANE_COLOR).to_edge(DOWN, buff=0.45)
         self.add_fixed_in_frame_mobjects(boundary_label)
         
-        # FIX TEXT: Dọn sạch Label cũ
         self.play(FadeOut(self._shield_badge_block), FadeIn(boundary_label), run_time=0.8)
         self.wait(1.5)
 
@@ -431,9 +402,7 @@ class KernelTrickScene(ThreeDScene):
         if len(self._reject_markers) > 0: fade_targets.append(self._reject_markers)
         self.play(*[FadeOut(m) for m in fade_targets], run_time=1.0)
         self.wait(0.3)
-    # =========================================================================
     # PHASE 5 — Gamma Slider
-    # =========================================================================
     def _phase5_gamma_slider(self, inner_pts: list, outer_pts: list) -> None:
         """Visual slider demonstrating how γ controls boundary tightness."""
         axes = Axes(
@@ -530,12 +499,10 @@ class KernelTrickScene(ThreeDScene):
         self.remove(phase_title, slider_track, lbl_l, lbl_r, handle, gamma_text)
         self.wait(0.3)
 
-    # =========================================================================
     # PHASE 6 — Split-Screen Comparison
-    # =========================================================================
     def _phase6_split_comparison(self, inner_pts: list, outer_pts: list) -> None:
         """Side-by-side: Linear SVM failure on XOR data vs RBF circular boundary."""
-        # Reset camera projection offset left over from previous phases
+        # Reset camera to origin for 2D split-screen
         self.set_camera_orientation(phi=0, theta=-90 * DEGREES, gamma=0, frame_center=ORIGIN)
 
         divider = Line(UP * 3.8, DOWN * 3.8, color=SLATE_GRAY,
@@ -547,7 +514,6 @@ class KernelTrickScene(ThreeDScene):
         left_center = LEFT * 3.5
         right_center = RIGHT * 3.5
 
-        # Shift both panels down to create clear top margin for titles.
         la = Axes(
             x_range=[0, 1, 0.5], y_range=[0, 1, 0.5],
             x_length=3.6, y_length=3.2,
@@ -573,7 +539,7 @@ class KernelTrickScene(ThreeDScene):
         left_title.move_to(left_center + UP * 1.8)
         self.add_fixed_in_frame_mobjects(left_title)
 
-        # ── Right Panel: concentric data + RBF boundary ───────────────────────
+        # Right Panel: concentric data + RBF boundary
         ra = Axes(
             x_range=XY_RANGE, y_range=XY_RANGE,
             x_length=3.6, y_length=3.2,
@@ -609,7 +575,7 @@ class KernelTrickScene(ThreeDScene):
         self.wait(0.5)
 
         conclusion = Text(
-            "Kernel Trick: Map to Higher Dimensions → Linearly Separable",
+            "Kernel Trick: Map to Higher Dimensions -> Linearly Separable",
             font=FONT, font_size=19, weight=BOLD, color=HYPERPLANE_COLOR,
         )
         conclusion_bg = SurroundingRectangle(
