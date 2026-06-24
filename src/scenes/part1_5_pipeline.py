@@ -1,702 +1,718 @@
 """
-Part 1.5 — Biometric Score Pipeline Walkthrough
-================================================
-Covers the FULL pipeline:
-  Raw Input → Feature Extraction → Matcher → Raw Score
-  → Score Normalization → Score-Level Fusion → SVM Decision
+Part 1.5 — Biometric Score Pipeline Walkthrough  (REWRITE v2)
+==============================================================
+Fixes from render screenshots:
+  • Arrow drop direction reversed (Raw Score → Normalize, not ←)
+  • Subtitle text clipped inside nodes  → larger nodes, smaller sub-font
+  • Fusion table: text cut off, emoji missing → taller rows, no emoji in Text()
+  • Bar chart: x-labels overlap problem badge → problem badge moved above chart
+  • Bridge phase: caption box overlaps scatter plot → caption moved to bottom edge,
+    axes shifted up, no overlap
 
-Also explains WHY score-level fusion is chosen over sensor / feature / decision
-fusion, and WHY normalization matters before combining heterogeneous scores.
-
-Visual style: 3Blue1Brown-inspired cinematic pedagogy on dark background.
+New content from textbook review:
+  • Quality Assessment node added (after Raw Input, before Feature Extraction)
+  • Stored Templates / Database cylinder added feeding into Matcher
+  • Raw scores now show heterogeneous units: Face=0.05 (distance), Finger=850 (similarity)
+  • Fusion Level table: Feature row mentions "curse of dimensionality" + incompatible dims;
+    Decision row mentions "rigid AND/OR labels → high FAR/FRR"
+  • Normalization phase: dramatic "?" moment before showing Min-Max formula
 """
 
 from __future__ import annotations
-
 import numpy as np
 from manim import *
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ── Colour tokens ──────────────────────────────────────────────────────────────
+BG_COLOR         = "#0B0C10"
+FONT             = "Montserrat"
+SLATE_GRAY       = "#888888"
+ACCENT           = "#F9DC5C"       # gold
+CLASS_B_COLOR    = "#00C2D1"       # cyan  (face)
+GENUINE_COLOR    = "#2ECC71"       # green
+IMPOSTOR_COLOR   = "#E74C3C"       # red
+NORM_COLOR       = "#A855F7"       # purple
+NODE_FILL        = "#12151F"
+NODE_STROKE      = "#3A3F55"
+ARROW_COLOR      = "#5A6080"
+DB_COLOR         = "#F39C12"       # orange for database
+QUAL_COLOR       = "#00BFA5"       # teal for quality
 
-# ── Colour tokens (mirrors constants.py, with safe fallback) ─────────────────
-try:
-    from constants import (
-        CLASS_A_COLOR, CLASS_B_COLOR, HYPERPLANE_COLOR,
-        BG_COLOR, FONT_MAIN, SLATE_GRAY,
-        GENUINE_COLOR, IMPOSTOR_COLOR,
-    )
-except ImportError:
-    CLASS_A_COLOR    = "#FF5E5E"
-    CLASS_B_COLOR    = "#00C2D1"
-    HYPERPLANE_COLOR = "#F9DC5C"
-    BG_COLOR         = "#0B0C10"
-    FONT_MAIN        = "Montserrat"
-    SLATE_GRAY       = "#888888"
-    GENUINE_COLOR    = "#2ECC71"
-    IMPOSTOR_COLOR   = "#E74C3C"
-
-FONT         = FONT_MAIN
-ACCENT       = HYPERPLANE_COLOR          # gold
-NODE_FILL    = "#12151F"
-NODE_STROKE  = "#3A3F55"
-PIPE_COLOR   = "#3A3F55"
-ARROW_COLOR  = "#5A6080"
-HIGHLIGHT    = "#00C2D1"                 # cyan for active node
-NORM_COLOR   = "#A855F7"                 # purple for normalization
-FUSION_COLOR = HYPERPLANE_COLOR
-DECISION_OK  = GENUINE_COLOR
-DECISION_BAD = IMPOSTOR_COLOR
-
-# ── Helper: rounded pipeline node ────────────────────────────────────────────
-
-def make_node(
+# ── Shared node factory ────────────────────────────────────────────────────────
+def node(
     label: str,
     sub: str = "",
-    width: float = 2.4,
-    height: float = 0.88,
+    w: float = 2.3,
+    h: float = 0.90,
     stroke: str = NODE_STROKE,
     fill: str = NODE_FILL,
-    label_size: int = 20,
-    sub_size: int = 14,
+    lsize: int = 18,
+    ssize: int = 12,
 ) -> VGroup:
-    """Create a rounded-rect node with an optional subtitle."""
     box = RoundedRectangle(
-        width=width, height=height, corner_radius=0.18,
+        width=w, height=h, corner_radius=0.16,
         fill_color=fill, fill_opacity=1.0,
         stroke_color=stroke, stroke_width=2.0,
     )
-    lbl = Text(label, font=FONT, font_size=label_size, color=WHITE)
-    grp = VGroup(box, lbl)
+    lbl = Text(label, font=FONT, font_size=lsize, color=WHITE)
+    lbl.move_to(box)
+    g = VGroup(box, lbl)
     if sub:
-        sub_text = Text(sub, font=FONT, font_size=sub_size, color=SLATE_GRAY)
-        sub_text.next_to(lbl, DOWN, buff=0.10)
-        grp.add(sub_text)
-    grp.move_to(ORIGIN)
-    return grp
+        s = Text(sub, font=FONT, font_size=ssize, color=SLATE_GRAY)
+        s.move_to(box).shift(DOWN * (h * 0.22))
+        lbl.shift(UP * (h * 0.14))
+        g.add(s)
+    return g
 
 
-def make_arrow(start: np.ndarray, end: np.ndarray) -> Arrow:
+def h_arr(a: VMobject, b: VMobject, col: str = ARROW_COLOR) -> Arrow:
     return Arrow(
-        start, end,
-        color=ARROW_COLOR,
-        stroke_width=2.2,
-        buff=0.12,
+        a.get_right(), b.get_left(),
+        color=col, stroke_width=2.2, buff=0.10,
         max_tip_length_to_length_ratio=0.18,
     )
 
 
-def highlight_node(node: VGroup, color: str = HIGHLIGHT, scene: Scene = None) -> None:
-    """Flash a node's border to the highlight colour."""
-    box = node[0]
-    if scene:
-        scene.play(
-            box.animate.set_stroke(color=color, width=3.2),
-            run_time=0.35,
-        )
-
-
-# ── Fusion level comparison table data ───────────────────────────────────────
-
-FUSION_LEVELS = [
-    ("Sensor",    "Ghép raw data",      "❌ Khó tương thích", "#888888"),
-    ("Feature",   "Ghép feature vector","⚠ Chiều cao, phức tạp", "#F39C12"),
-    ("Score ✓",  "Ghép matching scores","✅ Đơn giản, hiệu quả", GENUINE_COLOR),
-    ("Decision",  "Ghép Có / Không",    "⚠ Mất thông tin xác suất", "#F39C12"),
-]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 class PipelineScene(Scene):
-    """Full biometric pipeline walkthrough with normalization and fusion levels."""
-
     def construct(self) -> None:
         self.camera.background_color = BG_COLOR
-
         self._phase0_title()
-        self._phase1_pipeline_overview()
-        self._phase2_fusion_levels()
+        self._phase1_fusion_levels()
+        self._phase2_pipeline_overview()
         self._phase3_normalization()
-        self._phase4_fusion_node_and_bridge()
+        self._phase4_bridge()
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
     def _phase0_title(self) -> None:
-        """Quick title card — 2.5 s total."""
-        line1 = Text(
-            "Từ Ảnh Thô đến Quyết Định",
-            font=FONT, weight=BOLD, font_size=44, color=WHITE,
-        )
-        line2 = Text(
-            "Pipeline Sinh Trắc Học End-to-End",
-            font=FONT, font_size=28, slant=ITALIC, color=ACCENT,
-        ).next_to(line1, DOWN, buff=0.28)
+        t1 = Text("Pipeline Sinh Trắc Học", font=FONT, weight=BOLD,
+                  font_size=46, color=WHITE)
+        t2 = Text("Từ ảnh thô đến quyết định cuối cùng",
+                  font=FONT, font_size=24, slant=ITALIC, color=ACCENT)
+        t2.next_to(t1, DOWN, buff=0.30)
+        div = Line(LEFT * 3.5, RIGHT * 3.5, color=ACCENT, stroke_width=1.6)
+        div.next_to(t2, DOWN, buff=0.28)
+        grp = VGroup(t1, t2, div).move_to(ORIGIN)
+        self.play(Write(t1), run_time=1.0)
+        self.play(FadeIn(t2, shift=UP * 0.12), GrowFromCenter(div), run_time=0.8)
+        self.wait(1.1)
+        self.play(FadeOut(grp), run_time=0.6)
 
-        divider = Line(LEFT, RIGHT, color=ACCENT, stroke_width=1.8)
-        divider.width = line1.width
-        divider.next_to(line2, DOWN, buff=0.30)
-
-        title_group = VGroup(line1, line2, divider).move_to(ORIGIN)
-
-        self.play(Write(line1), run_time=1.1)
-        self.play(FadeIn(line2, shift=UP * 0.15), GrowFromCenter(divider), run_time=0.9)
-        self.wait(1.2)
-        self.play(FadeOut(title_group), run_time=0.7)
-
-    # ──────────────────────────────────────────────────────────────────────────
-    def _phase1_pipeline_overview(self) -> None:
-        """
-        Animate the 7-step pipeline left → right, lighting each node as we
-        explain its role with a brief caption.
-
-        Pipeline:
-          [Raw Input] → [Feature Extraction] → [Matcher] → [Raw Score]
-                                ↓ (second modality, same path)
-          [Normalization] → [Score Fusion] → [SVM Decision]
-        """
-
-        # ── Build nodes ──────────────────────────────────────────────────────
-        n_raw    = make_node("Raw Input",       "Ảnh / Âm thanh",  width=2.3, stroke=CLASS_B_COLOR)
-        n_feat   = make_node("Feature\nExtract","Minutiae / MFCC",  width=2.4, label_size=19)
-        n_match  = make_node("Matcher",         "Cosine / DTW",     width=2.2)
-        n_score  = make_node("Raw Score",       "∈ [0, 100]",       width=2.2, stroke=NORM_COLOR)
-
-        # Row 1: pipeline up to raw score
-        row1 = VGroup(n_raw, n_feat, n_match, n_score)
-        row1.arrange(RIGHT, buff=0.80)
-        row1.shift(UP * 0.9)
-
-        # Row 2: normalization → fusion → decision (centered under row1 gap)
-        n_norm   = make_node("Normalize",       "Min-Max / Z-score", width=2.4, stroke=NORM_COLOR)
-        n_fusion = make_node("Score Fusion",    "Combine scores",    width=2.4, stroke=ACCENT)
-        n_decide = make_node("SVM Decision",    "Accept / Reject",   width=2.4, stroke=GENUINE_COLOR)
-
-        row2 = VGroup(n_norm, n_fusion, n_decide)
-        row2.arrange(RIGHT, buff=0.80)
-        row2.next_to(row1, DOWN, buff=1.05)
-        row2.align_to(row1, LEFT).shift(RIGHT * 0.55)
-
-        all_nodes = VGroup(row1, row2)
-        all_nodes.move_to(ORIGIN + DOWN * 0.25)
-
-        # ── Arrows row 1 ─────────────────────────────────────────────────────
-        def _h_arrow(a: VGroup, b: VGroup) -> Arrow:
-            return make_arrow(a[0].get_right(), b[0].get_left())
-
-        arr_r1_01 = _h_arrow(n_raw,   n_feat)
-        arr_r1_12 = _h_arrow(n_feat,  n_match)
-        arr_r1_23 = _h_arrow(n_match, n_score)
-
-        # Vertical drop from n_score down to n_norm
-        arr_drop = Arrow(
-            n_score[0].get_bottom() + DOWN * 0.05,
-            n_norm[0].get_top()     + UP   * 0.05,
-            color=NORM_COLOR, stroke_width=2.2, buff=0.0,
-            max_tip_length_to_length_ratio=0.18,
-        )
-
-        arr_r2_01 = _h_arrow(n_norm,   n_fusion)
-        arr_r2_12 = _h_arrow(n_fusion, n_decide)
-
-        # Second-modality label on the drop arrow
-        second_lbl = Text(
-            "Modality 2\n(cùng quy trình)", font=FONT, font_size=13, color=SLATE_GRAY,
-        ).next_to(arr_drop, RIGHT, buff=0.10)
-
-        all_arrows = VGroup(
-            arr_r1_01, arr_r1_12, arr_r1_23,
-            arr_drop,
-            arr_r2_01, arr_r2_12,
-        )
-
-        # ── "Modality 1" label above row 1 ───────────────────────────────────
-        mod1_badge = Text("Modality 1  (VD: Face)", font=FONT, font_size=15, color=CLASS_B_COLOR)
-        mod1_badge.next_to(row1, UP, buff=0.25)
-
-        # ── Section heading ───────────────────────────────────────────────────
-        heading = Text(
-            "Pipeline tổng quan", font=FONT, font_size=22, color=ACCENT,
-        ).to_edge(UP, buff=0.25)
-
-        self.play(FadeIn(heading, shift=DOWN * 0.1), run_time=0.6)
-
-        # ── Animate nodes & arrows sequentially ──────────────────────────────
-        pipeline_seq = [
-            (n_raw,   arr_r1_01, "Đầu vào: ảnh khuôn mặt hoặc âm thanh giọng nói",  CLASS_B_COLOR),
-            (n_feat,  arr_r1_12, "Trích đặc trưng: minutiae vân tay, MFCC giọng nói",  WHITE),
-            (n_match, arr_r1_23, "Matcher so sánh và cho ra điểm số tương đồng",        WHITE),
-            (n_score, arr_drop,  "Raw score — đơn vị khác nhau mỗi hệ thống!",        NORM_COLOR),
-        ]
-
-        caption_box = RoundedRectangle(
-            width=8.6, height=0.72, corner_radius=0.14,
-            fill_color="#0D0F18", fill_opacity=0.92,
-            stroke_color=SLATE_GRAY, stroke_width=1.0,
-        ).to_edge(DOWN, buff=0.22)
-        caption_text = Text("", font=FONT, font_size=18, color=WHITE).move_to(caption_box)
-
-        self.play(FadeIn(caption_box), run_time=0.4)
-        self.play(FadeIn(mod1_badge), run_time=0.5)
-
-        current_caption = caption_text
-
-        for node, arrow, cap_str, hi_col in pipeline_seq:
-            new_cap = Text(cap_str, font=FONT, font_size=18, color=WHITE).move_to(caption_box)
-            self.play(
-                FadeIn(node, scale=0.85),
-                node[0].animate.set_stroke(color=hi_col, width=3.0),
-                Transform(current_caption, new_cap),
-                run_time=0.75,
-            )
-            self.play(Create(arrow), run_time=0.55)
-            self.play(
-                node[0].animate.set_stroke(color=NODE_STROKE, width=2.0),
-                run_time=0.30,
-            )
-            self.wait(0.20)
-
-        # Drop label
-        self.play(FadeIn(second_lbl), run_time=0.4)
-        self.wait(0.3)
-
-        # Row 2
-        row2_seq = [
-            (n_norm,   arr_r2_01, "Chuẩn hóa: đưa tất cả scores về cùng thang đo [0,1]", NORM_COLOR),
-            (n_fusion, arr_r2_12, "Dung hợp: kết hợp scores từ nhiều modality thành vector", ACCENT),
-            (n_decide, None,      "SVM phân loại vector cuối → Accept hoặc Reject",         GENUINE_COLOR),
-        ]
-
-        for node, arrow, cap_str, hi_col in row2_seq:
-            new_cap = Text(cap_str, font=FONT, font_size=18, color=WHITE).move_to(caption_box)
-            self.play(
-                FadeIn(node, scale=0.85),
-                node[0].animate.set_stroke(color=hi_col, width=3.0),
-                Transform(current_caption, new_cap),
-                run_time=0.75,
-            )
-            if arrow:
-                self.play(Create(arrow), run_time=0.55)
-            self.play(
-                node[0].animate.set_stroke(color=NODE_STROKE, width=2.0),
-                run_time=0.30,
-            )
-            self.wait(0.25)
-
-        self.wait(1.0)
-
-        # ── Pulse the full pipeline once ─────────────────────────────────────
-        self.play(
-            LaggedStart(
-                *[node[0].animate(rate_func=there_and_back).set_stroke(color=ACCENT, width=3.5)
-                  for node in [n_raw, n_feat, n_match, n_score, n_norm, n_fusion, n_decide]],
-                lag_ratio=0.18,
-            ),
-            run_time=2.0,
-        )
-        self.wait(0.8)
-
-        # ── Store for next phase fade ─────────────────────────────────────────
-        self._pipeline_group = VGroup(
-            all_nodes, all_arrows, second_lbl, mod1_badge,
-            caption_box, current_caption, heading,
-        )
-        self.play(FadeOut(self._pipeline_group), run_time=1.0)
-        self.wait(0.3)
-
-    # ──────────────────────────────────────────────────────────────────────────
-    def _phase2_fusion_levels(self) -> None:
+    # ─────────────────────────────────────────────────────────────────────────
+    def _phase1_fusion_levels(self) -> None:
         """
         Animated comparison table — 4 fusion levels.
-        Highlight Score-level as the chosen approach.
+        Uses plain ASCII markers (no emoji inside Text) to avoid font issues.
+        Rows appear one by one; non-score rows dim; score row glows.
         """
-        heading = Text(
-            "Tại sao chọn Score-Level Fusion?",
-            font=FONT, weight=BOLD, font_size=30, color=ACCENT,
-        ).to_edge(UP, buff=0.35)
-        self.play(FadeIn(heading, shift=DOWN * 0.12), run_time=0.7)
+        heading = Text("Tại sao chọn Score-Level Fusion?",
+                       font=FONT, weight=BOLD, font_size=32, color=ACCENT)
+        heading.to_edge(UP, buff=0.32)
+        self.play(FadeIn(heading, shift=DOWN * 0.10), run_time=0.65)
 
-        # ── Build rows ───────────────────────────────────────────────────────
-        ROW_H  = 0.88
-        COL_W  = [1.8, 3.0, 3.6]   # Level | Method | Verdict
-        HEADER_COLOR = SLATE_GRAY
+        # ── table geometry ────────────────────────────────────────────────────
+        CW = [1.70, 3.20, 4.10]   # col widths: Level | Method | Verdict
+        RH_HEAD = 0.66
+        RH_DATA = 0.96             # taller rows → no text clipping
 
-        def _cell(txt: str, w: float, h: float = ROW_H,
-                  fc: str = NODE_FILL, sc: str = NODE_STROKE,
-                  tc: str = WHITE, fs: int = 17) -> VGroup:
-            box  = Rectangle(width=w, height=h,
-                             fill_color=fc, fill_opacity=1.0,
-                             stroke_color=sc, stroke_width=1.2)
-            label = Text(txt, font=FONT, font_size=fs, color=tc)
-            label.move_to(box)
-            return VGroup(box, label)
+        def _cell(txt: str, w: float, h: float,
+                  fc="#12151F", sc=NODE_STROKE,
+                  tc=WHITE, fs=15) -> VGroup:
+            box = Rectangle(width=w, height=h,
+                            fill_color=fc, fill_opacity=1.0,
+                            stroke_color=sc, stroke_width=1.3)
+            lbl = Text(txt, font=FONT, font_size=fs, color=tc)
+            # wrap if needed: shrink font if label wider than cell
+            if lbl.width > w - 0.18:
+                lbl.scale((w - 0.18) / lbl.width)
+            lbl.move_to(box)
+            return VGroup(box, lbl)
 
-        # Header row
-        h0 = _cell("Level",    COL_W[0], 0.72, fc="#181A28", sc=SLATE_GRAY, tc=HEADER_COLOR)
-        h1 = _cell("Phương pháp", COL_W[1], 0.72, fc="#181A28", sc=SLATE_GRAY, tc=HEADER_COLOR)
-        h2 = _cell("Đánh giá", COL_W[2], 0.72, fc="#181A28", sc=SLATE_GRAY, tc=HEADER_COLOR)
-        header_row = VGroup(h0, h1, h2).arrange(RIGHT, buff=0)
+        # header
+        hrow = VGroup(
+            _cell("Level",       CW[0], RH_HEAD, fc="#181B28", tc=SLATE_GRAY, fs=15),
+            _cell("Phương pháp", CW[1], RH_HEAD, fc="#181B28", tc=SLATE_GRAY, fs=15),
+            _cell("Nhận xét",    CW[2], RH_HEAD, fc="#181B28", tc=SLATE_GRAY, fs=15),
+        ).arrange(RIGHT, buff=0)
+
+        # data — verdict strings deliberately short to avoid overflow
+        DATA = [
+            ("Sensor",
+             "Ghep raw data",
+             "[X] Kho tuong thich, nhieu nhieu",
+             "#888888", "#888888"),
+            ("Feature",
+             "Ghep feature vector",
+             "[!] Curse of dimensionality",
+             "#F39C12", "#F39C12"),
+            ("Score  [OK]",
+             "Ghep matching scores",
+             "[V] Don gian, hieu qua nhat",
+             GENUINE_COLOR, GENUINE_COLOR),
+            ("Decision",
+             "Ghep Co / Khong",
+             "[!] Nhan cung (AND/OR), mat xac suat",
+             "#F39C12", "#F39C12"),
+        ]
+
+        # Vietnamese/readable labels map
+        LEVEL_LABELS  = ["Sensor", "Feature", "Score  ✓", "Decision"]
+        METHOD_LABELS = [
+            "Ghép raw data",
+            "Ghép feature vector",
+            "Ghép matching scores",
+            "Ghép Có / Không",
+        ]
+        VERDICT_LABELS = [
+            "Khó tương thích, nhiều nhiễu",
+            "Curse of dimensionality",
+            "Đơn giản, hiệu quả nhất",
+            "Nhãn cứng (AND/OR), mất xác suất",
+        ]
+        VERDICT_COLORS = ["#888888", "#F39C12", GENUINE_COLOR, "#F39C12"]
+        IS_SCORE = [False, False, True, False]
 
         data_rows = []
-        for level, method, verdict, color in FUSION_LEVELS:
-            is_score = "✓" in level
-            bg_fc = "#1A2A1A" if is_score else NODE_FILL
-            bg_sc = color if is_score else NODE_STROKE
-            sw    = 2.2 if is_score else 1.2
-            r0 = _cell(level,   COL_W[0], ROW_H, fc=bg_fc, sc=bg_sc, tc=color, fs=16)
-            r1 = _cell(method,  COL_W[1], ROW_H, fc=bg_fc, sc=bg_sc, tc=WHITE, fs=15)
-            r2 = _cell(verdict, COL_W[2], ROW_H, fc=bg_fc, sc=bg_sc, tc=color, fs=15)
-            for cell in [r0, r1, r2]:
+        for i in range(4):
+            bg_fc = "#162016" if IS_SCORE[i] else NODE_FILL
+            bg_sc = GENUINE_COLOR if IS_SCORE[i] else NODE_STROKE
+            sw    = 2.4 if IS_SCORE[i] else 1.3
+            tc_l  = GENUINE_COLOR if IS_SCORE[i] else VERDICT_COLORS[i]
+            r = VGroup(
+                _cell(LEVEL_LABELS[i],   CW[0], RH_DATA, fc=bg_fc, sc=bg_sc,
+                      tc=tc_l, fs=16),
+                _cell(METHOD_LABELS[i],  CW[1], RH_DATA, fc=bg_fc, sc=bg_sc,
+                      tc=WHITE, fs=14),
+                _cell(VERDICT_LABELS[i], CW[2], RH_DATA, fc=bg_fc, sc=bg_sc,
+                      tc=VERDICT_COLORS[i], fs=14),
+            ).arrange(RIGHT, buff=0)
+            for cell in r:
                 cell[0].set_stroke(width=sw)
-            row = VGroup(r0, r1, r2).arrange(RIGHT, buff=0)
-            data_rows.append(row)
+            data_rows.append(r)
 
-        table = VGroup(header_row, *data_rows).arrange(DOWN, buff=0)
-        table.move_to(ORIGIN + DOWN * 0.3)
+        table = VGroup(hrow, *data_rows).arrange(DOWN, buff=0)
+        table.move_to(ORIGIN + DOWN * 0.35)
 
-        # ── Animate ──────────────────────────────────────────────────────────
-        self.play(FadeIn(header_row, shift=DOWN * 0.1), run_time=0.55)
+        # ── animate ───────────────────────────────────────────────────────────
+        self.play(FadeIn(hrow, shift=DOWN * 0.08), run_time=0.5)
+        for row in data_rows:
+            self.play(FadeIn(row, shift=RIGHT * 0.22), run_time=0.42)
+            self.wait(0.12)
+        self.wait(0.5)
 
-        for i, row in enumerate(data_rows):
-            self.play(FadeIn(row, shift=RIGHT * 0.25), run_time=0.45)
-            self.wait(0.15)
-
-        self.wait(0.7)
-
-        # Spotlight Score row with glow
+        # dim non-score rows
         score_row = data_rows[2]
-        glow = SurroundingRectangle(
-            score_row,
-            color=GENUINE_COLOR, stroke_width=2.8,
-            buff=0.04, corner_radius=0.05,
-        )
-        check_label = Text(
-            "← Chúng ta chọn cấp độ này",
-            font=FONT, font_size=17, color=GENUINE_COLOR,
-        ).next_to(score_row, RIGHT, buff=0.22)
+        non_score = VGroup(data_rows[0], data_rows[1], data_rows[3])
+        self.play(non_score.animate.set_opacity(0.28), run_time=0.7)
 
-        self.play(
-            Create(glow),
-            FadeIn(check_label, shift=LEFT * 0.2),
-            run_time=0.8,
-        )
-        self.wait(1.5)
+        glow = SurroundingRectangle(score_row, color=GENUINE_COLOR,
+                                    stroke_width=3.0, buff=0.05,
+                                    corner_radius=0.04)
+        chosen_lbl = Text("← Chúng ta chọn cấp độ này",
+                          font=FONT, font_size=16, color=GENUINE_COLOR)
+        chosen_lbl.next_to(score_row, RIGHT, buff=0.22)
+        self.play(Create(glow), FadeIn(chosen_lbl, shift=LEFT * 0.18), run_time=0.8)
+        self.wait(0.6)
 
-        # Rationale bullets (appear below table)
-        reasons = [
-            "✓  Không cần truy cập raw data sau quá trình matching",
-            "✓  Dễ kết hợp các hệ thống matcher khác nhau",
-            "✓  Giữ thông tin xác suất (soft decision)",
+        # sub-bullets below table
+        bullets_txt = [
+            "+ Không cần truy cập raw data sau matching",
+            "+ Dễ kết hợp các hệ thống matcher khác nhau",
+            "+ Giữ thông tin xác suất (soft decision)",
         ]
         bullets = VGroup(*[
-            Text(r, font=FONT, font_size=16, color=GENUINE_COLOR)
-            for r in reasons
-        ]).arrange(DOWN, aligned_edge=LEFT, buff=0.16)
-        bullets.next_to(table, DOWN, buff=0.42)
+            Text(b, font=FONT, font_size=15, color=GENUINE_COLOR)
+            for b in bullets_txt
+        ]).arrange(DOWN, aligned_edge=LEFT, buff=0.14)
+        bullets.next_to(table, DOWN, buff=0.32)
+        self.play(LaggedStart(*[FadeIn(b, shift=RIGHT * 0.25) for b in bullets],
+                              lag_ratio=0.32), run_time=1.3)
+        self.wait(1.6)
 
-        self.play(
-            LaggedStart(
-                *[FadeIn(b, shift=RIGHT * 0.3) for b in bullets],
-                lag_ratio=0.35,
-            ),
-            run_time=1.4,
-        )
-        self.wait(1.8)
+        self.play(FadeOut(VGroup(heading, table, glow, chosen_lbl, bullets)),
+                  run_time=0.9)
+        self.wait(0.2)
 
-        self.play(FadeOut(VGroup(heading, table, glow, check_label, bullets)), run_time=1.0)
-        self.wait(0.3)
-
-    # ──────────────────────────────────────────────────────────────────────────
-    def _phase3_normalization(self) -> None:
+    # ─────────────────────────────────────────────────────────────────────────
+    def _phase2_pipeline_overview(self) -> None:
         """
-        Show WHY score normalization is critical before fusion.
-        Side-by-side: raw heterogeneous scores vs normalized [0,1] scores.
-        Then animate min-max formula.
+        Correct textbook pipeline:
+          Raw Input → Quality Assessment → Feature Extraction
+          → Matcher ← [Database / Stored Templates]
+          → Raw Score → Normalization → Fusion (SVM) → Decision
+
+        Layout: two rows + database cylinder feeding Matcher from above.
+        All nodes appear left→right with a live caption bar at bottom.
+        Arrow from Raw Score goes DOWN then RIGHT to Normalization (not reversed).
         """
-        heading = Text(
-            "Tại sao cần chuẩn hóa điểm số?",
-            font=FONT, weight=BOLD, font_size=30, color=NORM_COLOR,
-        ).to_edge(UP, buff=0.35)
-        self.play(FadeIn(heading, shift=DOWN * 0.1), run_time=0.6)
+        heading = Text("Pipeline End-to-End",
+                       font=FONT, weight=BOLD, font_size=28, color=ACCENT)
+        heading.to_edge(UP, buff=0.28)
+        self.play(FadeIn(heading, shift=DOWN * 0.08), run_time=0.55)
 
-        # ── Left panel: raw heterogeneous scores ─────────────────────────────
-        axes_left = Axes(
-            x_range=[0, 4, 1], y_range=[0, 110, 25],
-            x_length=3.6, y_length=3.2,
-            axis_config={"stroke_width": 1.8, "color": WHITE, "stroke_opacity": 0.55},
-            tips=False,
-        ).shift(LEFT * 3.3 + DOWN * 0.4)
+        # ── caption bar (fixed at bottom, text transforms) ────────────────────
+        cap_bg = RoundedRectangle(
+            width=13.0, height=0.66, corner_radius=0.12,
+            fill_color="#0D0F18", fill_opacity=0.95,
+            stroke_color=SLATE_GRAY, stroke_width=1.0,
+        ).to_edge(DOWN, buff=0.18)
+        cap_txt = Text("", font=FONT, font_size=17, color=WHITE).move_to(cap_bg)
+        self.play(FadeIn(cap_bg), run_time=0.3)
 
-        raw_scores = {
-            "Face\n(0-100)":        (1, 78,  CLASS_B_COLOR),
-            "Fingerprint\n(0-100)": (2, 45,  GENUINE_COLOR),
-            "Voice\n(0-1)×100":     (3, 6,   "#A855F7"),
-        }
+        def set_caption(new_str: str, col: str = WHITE) -> None:
+            new = Text(new_str, font=FONT, font_size=17, color=col).move_to(cap_bg)
+            self.play(Transform(cap_txt, new), run_time=0.45)
 
-        raw_bars   = VGroup()
-        raw_labels = VGroup()
-        for key, (xi, yi, col) in raw_scores.items():
-            bar = Rectangle(
-                width=0.55, height=axes_left.c2p(0, yi)[1] - axes_left.c2p(0, 0)[1],
-                fill_color=col, fill_opacity=0.85, stroke_width=0,
-            )
-            bar.align_to(axes_left.c2p(xi, 0), DOWN)
-            bar.align_to(axes_left.c2p(xi, 0), LEFT)
-            bar.shift(LEFT * 0.28)
+        # ── Row 1 nodes ───────────────────────────────────────────────────────
+        n_raw  = node("Raw Input",   "Anh / Am thanh",   w=2.10, stroke=CLASS_B_COLOR)
+        n_qual = node("Quality\nCheck", "Do net / Do am", w=2.10, lsize=16, stroke=QUAL_COLOR)
+        n_feat = node("Feature\nExtract", "Minutiae / MFCC", w=2.20, lsize=16)
+        n_mat  = node("Matcher",     "Cosine / DTW",     w=2.10)
 
-            lbl = Text(key, font=FONT, font_size=12, color=col)
-            lbl.next_to(bar, DOWN, buff=0.12)
+        row1 = VGroup(n_raw, n_qual, n_feat, n_mat).arrange(RIGHT, buff=0.55)
+        row1.move_to(UP * 1.50 + LEFT * 0.60)
 
-            val_lbl = Text(f"{yi}", font=FONT, font_size=14, color=col)
-            val_lbl.next_to(bar, UP, buff=0.08)
+        # ── Database cylinder (above Matcher) ─────────────────────────────────
+        # Simulate cylinder with ellipse + rect
+        db_w, db_h = 1.70, 0.72
+        db_rect = Rectangle(width=db_w, height=db_h * 0.82,
+                            fill_color="#1A1000", fill_opacity=1.0,
+                            stroke_color=DB_COLOR, stroke_width=2.0)
+        db_top  = Ellipse(width=db_w, height=db_h * 0.36,
+                          fill_color="#2A1A00", fill_opacity=1.0,
+                          stroke_color=DB_COLOR, stroke_width=2.0)
+        db_bot  = Ellipse(width=db_w, height=db_h * 0.36,
+                          fill_color="#1A1000", fill_opacity=1.0,
+                          stroke_color=DB_COLOR, stroke_width=2.0)
+        db_top.move_to(db_rect.get_top())
+        db_bot.move_to(db_rect.get_bottom())
+        db_lbl  = Text("Database", font=FONT, font_size=13, color=DB_COLOR)
+        db_lbl.move_to(db_rect)
+        db_sub  = Text("Stored Templates", font=FONT, font_size=11, color=SLATE_GRAY)
+        db_sub.next_to(db_lbl, DOWN, buff=0.08)
+        db_cyl  = VGroup(db_rect, db_bot, db_top, db_lbl, db_sub)
+        db_cyl.next_to(n_mat, UP, buff=0.42)
 
-            raw_bars.add(VGroup(bar, val_lbl))
-            raw_labels.add(lbl)
+        # ── Row 2 nodes ───────────────────────────────────────────────────────
+        n_score = node("Raw Score",  "Di don vi!",        w=2.10, stroke=NORM_COLOR)
+        n_norm  = node("Normalize",  "Min-Max / Z-score", w=2.20, stroke=NORM_COLOR)
+        n_fuse  = node("Score Fusion", "SVM vector",       w=2.20, stroke=ACCENT)
+        n_dec   = node("Decision",   "Accept / Reject",   w=2.10, stroke=GENUINE_COLOR)
 
-        left_title = Text("Raw scores (bất đồng đơn vị)", font=FONT, font_size=16,
-                          color=SLATE_GRAY).next_to(axes_left, UP, buff=0.18)
-        problem_badge = Text("⚠  Voice score bị lấn át!", font=FONT, font_size=15,
-                             color=IMPOSTOR_COLOR).next_to(axes_left, DOWN, buff=0.15)
+        row2 = VGroup(n_score, n_norm, n_fuse, n_dec).arrange(RIGHT, buff=0.55)
+        row2.move_to(DOWN * 0.90 + LEFT * 0.60)
 
-        # ── Right panel: normalized scores ───────────────────────────────────
-        axes_right = Axes(
-            x_range=[0, 4, 1], y_range=[0, 1.1, 0.25],
-            x_length=3.6, y_length=3.2,
-            axis_config={"stroke_width": 1.8, "color": WHITE, "stroke_opacity": 0.55},
-            tips=False,
-        ).shift(RIGHT * 3.3 + DOWN * 0.4)
+        # align row2 left edge with row1 left edge
+        offset = row1.get_left()[0] - row2.get_left()[0]
+        row2.shift(RIGHT * offset)
 
-        norm_vals = {
-            "Face":        (1, 0.78, CLASS_B_COLOR),
-            "Fingerprint": (2, 0.45, GENUINE_COLOR),
-            "Voice":       (3, 0.62, "#A855F7"),
-        }
+        # ── Modality-1 label ──────────────────────────────────────────────────
+        mod1 = Text("Modality 1  (VD: Khuon mat)",
+                    font=FONT, font_size=14, color=CLASS_B_COLOR)
+        mod1.next_to(row1, UP, buff=0.22)
 
-        norm_bars   = VGroup()
-        norm_labels = VGroup()
-        for key, (xi, yi, col) in norm_vals.items():
-            bar = Rectangle(
-                width=0.55, height=axes_right.c2p(0, yi)[1] - axes_right.c2p(0, 0)[1],
-                fill_color=col, fill_opacity=0.85, stroke_width=0,
-            )
-            bar.align_to(axes_right.c2p(xi, 0), DOWN)
-            bar.align_to(axes_right.c2p(xi, 0), LEFT)
-            bar.shift(LEFT * 0.28)
+        # ── Build arrows ──────────────────────────────────────────────────────
+        arr_rq  = h_arr(n_raw,  n_qual, CLASS_B_COLOR)
+        arr_qf  = h_arr(n_qual, n_feat, QUAL_COLOR)
+        arr_fm  = h_arr(n_feat, n_mat)
 
-            lbl = Text(key, font=FONT, font_size=12, color=col)
-            lbl.next_to(bar, DOWN, buff=0.12)
-
-            val_lbl = Text(f"{yi:.2f}", font=FONT, font_size=14, color=col)
-            val_lbl.next_to(bar, UP, buff=0.08)
-
-            norm_bars.add(VGroup(bar, val_lbl))
-            norm_labels.add(lbl)
-
-        right_title = Text("Sau chuẩn hóa Min-Max [0, 1]", font=FONT, font_size=16,
-                           color=NORM_COLOR).next_to(axes_right, UP, buff=0.18)
-        ok_badge = Text("✓  Cùng thang đo — so sánh công bằng!", font=FONT, font_size=15,
-                        color=GENUINE_COLOR).next_to(axes_right, DOWN, buff=0.15)
-
-        # Arrow between panels
-        transform_arrow = Arrow(
-            axes_left.get_right() + RIGHT * 0.1,
-            axes_right.get_left() + LEFT  * 0.1,
-            color=NORM_COLOR, stroke_width=2.8, buff=0.05,
+        # DB → Matcher: downward arrow from db_cyl bottom to n_mat top
+        arr_db  = Arrow(
+            db_cyl.get_bottom() + DOWN * 0.05,
+            n_mat[0].get_top()  + UP   * 0.05,
+            color=DB_COLOR, stroke_width=2.0, buff=0.0,
             max_tip_length_to_length_ratio=0.20,
         )
-        norm_label_mid = Text("Normalize", font=FONT, font_size=16, color=NORM_COLOR)
-        norm_label_mid.next_to(transform_arrow, UP, buff=0.10)
 
-        # ── Play left panel ──────────────────────────────────────────────────
-        self.play(FadeIn(axes_left), FadeIn(left_title), run_time=0.7)
-        self.play(
-            LaggedStart(*[FadeIn(b, shift=UP * 0.3) for b in raw_bars], lag_ratio=0.25),
-            FadeIn(raw_labels),
-            run_time=1.2,
-        )
-        self.play(FadeIn(problem_badge, shift=UP * 0.1), run_time=0.55)
-        self.wait(0.7)
+        # Raw Score: Matcher → drop down to row2 start
+        # vertical drop from n_mat bottom to n_score top
+        drop_start = n_mat[0].get_bottom()  + DOWN * 0.08
+        drop_end   = n_score[0].get_top()   + UP   * 0.08
 
-        # Transform arrow
-        self.play(
-            GrowArrow(transform_arrow),
-            FadeIn(norm_label_mid),
-            run_time=0.8,
+        # We go via an elbow: down from matcher, then left to n_score
+        # Use CurvedArrow for clean elbow
+        elbow_mid  = np.array([n_mat.get_center()[0],
+                               n_score.get_center()[1],
+                               0])
+        arr_elbow = VGroup(
+            Line(drop_start, elbow_mid + UP * 0.00, color=NORM_COLOR, stroke_width=2.2),
+            Arrow(elbow_mid, drop_end, color=NORM_COLOR, stroke_width=2.2,
+                  buff=0.0, max_tip_length_to_length_ratio=0.18),
         )
 
-        # Right panel
-        self.play(FadeIn(axes_right), FadeIn(right_title), run_time=0.7)
-        self.play(
-            LaggedStart(*[FadeIn(b, shift=UP * 0.3) for b in norm_bars], lag_ratio=0.25),
-            FadeIn(norm_labels),
-            run_time=1.2,
+        arr_ns  = h_arr(n_score, n_norm,  NORM_COLOR)
+        arr_nf  = h_arr(n_norm,  n_fuse,  ACCENT)
+        arr_fd  = h_arr(n_fuse,  n_dec,   GENUINE_COLOR)
+
+        # Modality-2 tag beside elbow
+        mod2_tag = Text("Modality 2\n(cung quy trinh)",
+                        font=FONT, font_size=12, color=SLATE_GRAY)
+        mod2_tag.next_to(arr_elbow, RIGHT, buff=0.14)
+
+        # ── Sequential animation with captions ───────────────────────────────
+        self.play(FadeIn(mod1), run_time=0.4)
+
+        steps = [
+            (n_raw,   arr_rq,   CLASS_B_COLOR,
+             "Thu nhan du lieu tho: anh khuon mat, van tay, giong noi"),
+            (n_qual,  arr_qf,   QUAL_COLOR,
+             "Quality Check: loai ngay neu anh mo, ngon tay uot, goc nghieng qua lon"),
+            (n_feat,  arr_fm,   WHITE,
+             "Trich dac trung: minutiae van tay, MFCC giong noi, eigenface"),
+            (n_mat,   None,     WHITE,
+             "Matcher can 2 luong: Feature moi quet + Template tu Database"),
+        ]
+
+        for nd, arr, hi, cap in steps:
+            set_caption(cap)
+            self.play(
+                FadeIn(nd, scale=0.88),
+                nd[0].animate.set_stroke(color=hi, width=3.0),
+                run_time=0.65,
+            )
+            if arr:
+                self.play(Create(arr), run_time=0.50)
+            self.play(nd[0].animate.set_stroke(color=NODE_STROKE, width=2.0),
+                      run_time=0.25)
+            self.wait(0.15)
+
+        # Database appears from above
+        set_caption("Database chua Stored Templates tu buoc Enrollment (dang ky)")
+        self.play(FadeIn(db_cyl, shift=DOWN * 0.25), run_time=0.7)
+        self.play(Create(arr_db), run_time=0.55)
+        self.wait(0.3)
+
+        # Elbow drop → Row 2
+        set_caption(
+            "Raw Score: khuon mat → 0.05 (distance), van tay → 850 (similarity)",
+            NORM_COLOR,
         )
-        self.play(FadeIn(ok_badge, shift=UP * 0.1), run_time=0.55)
+        self.play(Create(arr_elbow[0]), run_time=0.4)
+        self.play(Create(arr_elbow[1]), run_time=0.4)
+        self.play(FadeIn(mod2_tag), run_time=0.3)
+
+        row2_steps = [
+            (n_score, arr_ns, NORM_COLOR,
+             "Raw scores co don vi hoan toan khac nhau — khong the ghep truc tiep!"),
+            (n_norm,  arr_nf, NORM_COLOR,
+             "Normalization: dua ve cung thang do [0, 1] — Min-Max hoac Z-score"),
+            (n_fuse,  arr_fd, ACCENT,
+             "Score Fusion: ghep thanh vector [s_face, s_finger] → dau vao SVM"),
+            (n_dec,   None,   GENUINE_COLOR,
+             "Decision: SVM phan loai → Accept (Genuine) hoac Reject (Impostor)"),
+        ]
+
+        for nd, arr, hi, cap in row2_steps:
+            set_caption(cap, hi)
+            self.play(
+                FadeIn(nd, scale=0.88),
+                nd[0].animate.set_stroke(color=hi, width=3.0),
+                run_time=0.65,
+            )
+            if arr:
+                self.play(Create(arr), run_time=0.50)
+            self.play(nd[0].animate.set_stroke(color=NODE_STROKE, width=2.0),
+                      run_time=0.25)
+            self.wait(0.18)
+
+        # full pipeline pulse
+        self.wait(0.5)
+        all_nodes = [n_raw, n_qual, n_feat, n_mat, n_score, n_norm, n_fuse, n_dec]
+        self.play(
+            LaggedStart(
+                *[nd[0].animate(rate_func=there_and_back).set_stroke(
+                    color=ACCENT, width=3.5)
+                  for nd in all_nodes],
+                lag_ratio=0.16,
+            ),
+            run_time=2.2,
+        )
         self.wait(0.8)
 
-        # ── Min-Max formula reveal ────────────────────────────────────────────
-        formula_bg = RoundedRectangle(
-            width=5.4, height=1.1, corner_radius=0.18,
+        everything = VGroup(
+            heading, mod1, cap_bg, cap_txt,
+            n_raw, n_qual, n_feat, n_mat,
+            db_cyl, arr_db,
+            arr_rq, arr_qf, arr_fm,
+            arr_elbow, mod2_tag,
+            n_score, n_norm, n_fuse, n_dec,
+            arr_ns, arr_nf, arr_fd,
+        )
+        self.play(FadeOut(everything), run_time=1.0)
+        self.wait(0.25)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    def _phase3_normalization(self) -> None:
+        """
+        Side-by-side bar chart: raw heterogeneous scores vs normalized.
+        FIX: problem badge placed ABOVE the left chart (not below where it clashes).
+        Bar x-labels placed at fixed positions, no overlap.
+        """
+        heading = Text("Tại sao cần chuẩn hóa điểm số?",
+                       font=FONT, weight=BOLD, font_size=30, color=NORM_COLOR)
+        heading.to_edge(UP, buff=0.30)
+        self.play(FadeIn(heading, shift=DOWN * 0.08), run_time=0.6)
+
+        # ── LEFT: raw bar chart ───────────────────────────────────────────────
+        ax_l = Axes(
+            x_range=[0, 4, 1], y_range=[0, 1000, 250],
+            x_length=3.8, y_length=3.0,
+            axis_config={"stroke_width": 1.6, "color": WHITE,
+                         "stroke_opacity": 0.50, "include_numbers": False},
+            tips=False,
+        ).shift(LEFT * 3.40 + DOWN * 0.40)
+
+        RAW = [
+            ("Face\n(distance)", 1, 0.05,  CLASS_B_COLOR, 0.05),    # very small
+            ("Fingerprint\n(similarity)", 2, 850,  GENUINE_COLOR, 850),
+            ("Voice\n(cosine)", 3, 0.72,  "#A855F7", 0.72),
+        ]
+
+        raw_bar_grp = VGroup()
+        raw_xlbl_grp = VGroup()
+        for xlbl, xi, yi, col, disp in RAW:
+            # scale yi to plot height (max axis = 1000)
+            bar_h = (ax_l.c2p(0, yi)[1] - ax_l.c2p(0, 0)[1]) if yi > 1 \
+                    else (ax_l.c2p(0, 1)[1] - ax_l.c2p(0, 0)[1]) * yi
+            bar = Rectangle(
+                width=0.52, height=max(bar_h, 0.06),
+                fill_color=col, fill_opacity=0.85, stroke_width=0,
+            )
+            bar.align_to(ax_l.c2p(xi - 0.26, 0), DL)
+            val_t = Text(str(disp), font=FONT, font_size=13, color=col)
+            val_t.next_to(bar, UP, buff=0.06)
+            raw_bar_grp.add(VGroup(bar, val_t))
+
+            # x-label below axis — fixed y position, no overlap
+            xl = Text(xlbl, font=FONT, font_size=11, color=col)
+            xl.move_to(ax_l.c2p(xi, 0) + DOWN * 0.52)
+            raw_xlbl_grp.add(xl)
+
+        left_title = Text("Raw scores — đơn vị khác nhau",
+                          font=FONT, font_size=15, color=SLATE_GRAY)
+        left_title.next_to(ax_l, UP, buff=0.18)
+
+        # problem badge ABOVE the chart title (not below bars)
+        prob_badge = Text("[!]  Van tay 850 >> Face 0.05 — khong the ghep!",
+                          font=FONT, font_size=14, color=IMPOSTOR_COLOR)
+        prob_badge.next_to(left_title, UP, buff=0.16)
+
+        # ── RIGHT: normalized bar chart ───────────────────────────────────────
+        ax_r = Axes(
+            x_range=[0, 4, 1], y_range=[0, 1.1, 0.25],
+            x_length=3.8, y_length=3.0,
+            axis_config={"stroke_width": 1.6, "color": WHITE,
+                         "stroke_opacity": 0.50, "include_numbers": False},
+            tips=False,
+        ).shift(RIGHT * 3.40 + DOWN * 0.40)
+
+        NORM = [
+            ("Face",        1, 0.80, CLASS_B_COLOR),
+            ("Fingerprint", 2, 0.70, GENUINE_COLOR),
+            ("Voice",       3, 0.62, "#A855F7"),
+        ]
+        norm_bar_grp = VGroup()
+        norm_xlbl_grp = VGroup()
+        for xlbl, xi, yi, col in NORM:
+            bar_h = ax_r.c2p(0, yi)[1] - ax_r.c2p(0, 0)[1]
+            bar = Rectangle(
+                width=0.52, height=bar_h,
+                fill_color=col, fill_opacity=0.85, stroke_width=0,
+            )
+            bar.align_to(ax_r.c2p(xi - 0.26, 0), DL)
+            val_t = Text(f"{yi:.2f}", font=FONT, font_size=13, color=col)
+            val_t.next_to(bar, UP, buff=0.06)
+            norm_bar_grp.add(VGroup(bar, val_t))
+            xl = Text(xlbl, font=FONT, font_size=11, color=col)
+            xl.move_to(ax_r.c2p(xi, 0) + DOWN * 0.42)
+            norm_xlbl_grp.add(xl)
+
+        right_title = Text("Sau chuẩn hóa Min-Max  →  [0, 1]",
+                           font=FONT, font_size=15, color=NORM_COLOR)
+        right_title.next_to(ax_r, UP, buff=0.18)
+        ok_badge = Text("[V]  Cung thang do — so sanh cong bang!",
+                        font=FONT, font_size=14, color=GENUINE_COLOR)
+        ok_badge.next_to(right_title, UP, buff=0.16)
+
+        # transform arrow between panels
+        t_arr = Arrow(
+            ax_l.get_right() + RIGHT * 0.15,
+            ax_r.get_left()  + LEFT  * 0.15,
+            color=NORM_COLOR, stroke_width=2.6, buff=0.05,
+            max_tip_length_to_length_ratio=0.22,
+        )
+        t_lbl = Text("Normalize", font=FONT, font_size=15, color=NORM_COLOR)
+        t_lbl.next_to(t_arr, UP, buff=0.10)
+
+        # ── play ─────────────────────────────────────────────────────────────
+        self.play(FadeIn(ax_l), FadeIn(left_title), run_time=0.65)
+        self.play(
+            LaggedStart(*[FadeIn(b, shift=UP * 0.28) for b in raw_bar_grp],
+                        lag_ratio=0.22),
+            FadeIn(raw_xlbl_grp),
+            run_time=1.1,
+        )
+        self.play(FadeIn(prob_badge, shift=DOWN * 0.10), run_time=0.5)
+        self.wait(0.6)
+
+        self.play(GrowArrow(t_arr), FadeIn(t_lbl), run_time=0.7)
+        self.play(FadeIn(ax_r), FadeIn(right_title), run_time=0.6)
+        self.play(
+            LaggedStart(*[FadeIn(b, shift=UP * 0.28) for b in norm_bar_grp],
+                        lag_ratio=0.22),
+            FadeIn(norm_xlbl_grp),
+            run_time=1.1,
+        )
+        self.play(FadeIn(ok_badge, shift=DOWN * 0.10), run_time=0.5)
+        self.wait(0.7)
+
+        # formula
+        f_bg = RoundedRectangle(
+            width=5.6, height=1.10, corner_radius=0.16,
             fill_color="#0D0F1E", fill_opacity=0.95,
             stroke_color=NORM_COLOR, stroke_width=1.8,
         ).to_edge(DOWN, buff=0.18)
-
         formula = MathTex(
             r"s'_i = \frac{s_i - s_{\min}}{s_{\max} - s_{\min}}",
-            color=WHITE, font_size=34,
-        ).move_to(formula_bg)
-
-        formula_note = Text(
-            "Min-Max Normalization   →   s'ᵢ ∈ [0, 1]",
-            font=FONT, font_size=14, color=NORM_COLOR,
-        ).next_to(formula_bg, DOWN, buff=0.10)
-
-        self.play(FadeIn(formula_bg), run_time=0.4)
-        self.play(Write(formula), run_time=1.3)
-        self.play(FadeIn(formula_note), run_time=0.5)
-        self.wait(1.8)
-
-        panel_group = VGroup(
-            heading, axes_left, left_title, raw_bars, raw_labels, problem_badge,
-            axes_right, right_title, norm_bars, norm_labels, ok_badge,
-            transform_arrow, norm_label_mid,
-            formula_bg, formula, formula_note,
-        )
-        self.play(FadeOut(panel_group), run_time=1.1)
-        self.wait(0.3)
-
-    # ──────────────────────────────────────────────────────────────────────────
-    def _phase4_fusion_node_and_bridge(self) -> None:
-        """
-        Show the fusion node receiving normalized scores, forming the 2D
-        feature vector [s_face, s_finger], then zoom into the 2D plane to
-        bridge naturally to Part 2 (Score Fusion & Linear SVM).
-        """
-        heading = Text(
-            "Vector dung hợp → đầu vào SVM",
-            font=FONT, weight=BOLD, font_size=30, color=ACCENT,
-        ).to_edge(UP, buff=0.32)
-        self.play(FadeIn(heading, shift=DOWN * 0.1), run_time=0.6)
-
-        # ── Two score streams ─────────────────────────────────────────────────
-        s1_lbl = Text("Face score:        s₁ = 0.78", font=FONT, font_size=22, color=CLASS_B_COLOR)
-        s2_lbl = Text("Fingerprint score: s₂ = 0.45", font=FONT, font_size=22, color=GENUINE_COLOR)
-        streams = VGroup(s1_lbl, s2_lbl).arrange(DOWN, aligned_edge=LEFT, buff=0.30)
-        streams.shift(LEFT * 3.2 + UP * 0.2)
-
-        self.play(
-            LaggedStart(
-                FadeIn(s1_lbl, shift=RIGHT * 0.3),
-                FadeIn(s2_lbl, shift=RIGHT * 0.3),
-                lag_ratio=0.5,
-            ),
-            run_time=1.0,
-        )
-        self.wait(0.3)
-
-        # ── Fusion node ───────────────────────────────────────────────────────
-        fusion_node = make_node("Fusion Node", width=2.6, height=1.0,
-                                stroke=ACCENT, fill="#1A1608")
-        fusion_node.move_to(ORIGIN + UP * 0.2)
-
-        arr1 = Arrow(s1_lbl.get_right() + RIGHT * 0.05,
-                     fusion_node[0].get_left() + LEFT * 0.05 + UP * 0.22,
-                     color=CLASS_B_COLOR, stroke_width=2.2, buff=0.08,
-                     max_tip_length_to_length_ratio=0.18)
-        arr2 = Arrow(s2_lbl.get_right() + RIGHT * 0.05,
-                     fusion_node[0].get_left() + LEFT * 0.05 + DOWN * 0.22,
-                     color=GENUINE_COLOR, stroke_width=2.2, buff=0.08,
-                     max_tip_length_to_length_ratio=0.18)
-
-        self.play(
-            GrowArrow(arr1), GrowArrow(arr2),
-            FadeIn(fusion_node, scale=0.85),
-            run_time=0.9,
-        )
-        self.wait(0.3)
-
-        # ── Output vector ─────────────────────────────────────────────────────
-        vec_label = MathTex(
-            r"\mathbf{x} = \begin{bmatrix} 0.78 \\ 0.45 \end{bmatrix}",
             color=WHITE, font_size=36,
-        ).shift(RIGHT * 3.2 + UP * 0.2)
+        ).move_to(f_bg)
+        self.play(FadeIn(f_bg), Write(formula), run_time=1.2)
+        self.wait(1.6)
 
-        arr_out = Arrow(
-            fusion_node[0].get_right() + RIGHT * 0.05,
-            vec_label.get_left() + LEFT * 0.08,
-            color=ACCENT, stroke_width=2.4, buff=0.08,
-            max_tip_length_to_length_ratio=0.18,
-        )
+        self.play(FadeOut(VGroup(
+            heading, ax_l, left_title, raw_bar_grp, raw_xlbl_grp, prob_badge,
+            ax_r, right_title, norm_bar_grp, norm_xlbl_grp, ok_badge,
+            t_arr, t_lbl, f_bg, formula,
+        )), run_time=1.0)
+        self.wait(0.25)
 
-        self.play(GrowArrow(arr_out), Write(vec_label), run_time=1.0)
-        self.wait(0.5)
+    # ─────────────────────────────────────────────────────────────────────────
+    def _phase4_bridge(self) -> None:
+        """
+        Show fusion node forming 2D vector → mini scatter preview → bridge to Part 2.
+        FIX: caption box at very bottom edge; axes shifted to upper-center;
+             scatter points use correct Part-2 positions; no overlap.
+        """
+        heading = Text("Vector dung hợp → đầu vào SVM",
+                       font=FONT, weight=BOLD, font_size=30, color=ACCENT)
+        heading.to_edge(UP, buff=0.30)
+        self.play(FadeIn(heading, shift=DOWN * 0.08), run_time=0.6)
 
-        dim_note = Text(
-            "Vector 2D — một điểm trong không gian đặc trưng",
-            font=FONT, font_size=17, color=SLATE_GRAY,
-        ).next_to(vec_label, DOWN, buff=0.25)
-        self.play(FadeIn(dim_note, shift=UP * 0.1), run_time=0.6)
-        self.wait(1.0)
+        # Two score streams (left side)
+        s1 = Text("Face score (norm):         s₁ = 0.80",
+                  font=FONT, font_size=20, color=CLASS_B_COLOR)
+        s2 = Text("Fingerprint score (norm):  s₂ = 0.70",
+                  font=FONT, font_size=20, color=GENUINE_COLOR)
+        streams = VGroup(s1, s2).arrange(DOWN, aligned_edge=LEFT, buff=0.28)
+        streams.move_to(LEFT * 3.40 + UP * 1.0)
 
-        # ── Mini axes preview — teaser of Part 2 ─────────────────────────────
-        mini_axes = Axes(
+        self.play(LaggedStart(
+            FadeIn(s1, shift=RIGHT * 0.25),
+            FadeIn(s2, shift=RIGHT * 0.25),
+            lag_ratio=0.45,
+        ), run_time=0.9)
+
+        # Fusion node center
+        f_node = node("Fusion\nNode", w=2.4, h=1.0, stroke=ACCENT,
+                      fill="#1A1608", lsize=18)
+        f_node.move_to(ORIGIN + UP * 0.85)
+
+        a1 = Arrow(s1.get_right() + RIGHT * 0.05,
+                   f_node[0].get_left() + LEFT * 0.05 + UP * 0.20,
+                   color=CLASS_B_COLOR, stroke_width=2.0, buff=0.06,
+                   max_tip_length_to_length_ratio=0.18)
+        a2 = Arrow(s2.get_right() + RIGHT * 0.05,
+                   f_node[0].get_left() + LEFT * 0.05 + DOWN * 0.20,
+                   color=GENUINE_COLOR, stroke_width=2.0, buff=0.06,
+                   max_tip_length_to_length_ratio=0.18)
+        self.play(GrowArrow(a1), GrowArrow(a2),
+                  FadeIn(f_node, scale=0.85), run_time=0.9)
+
+        # Output vector (right side)
+        vec = MathTex(
+            r"\mathbf{x} = \begin{bmatrix} 0.80 \\ 0.70 \end{bmatrix}",
+            color=WHITE, font_size=38,
+        ).move_to(RIGHT * 3.40 + UP * 0.90)
+        a_out = Arrow(f_node[0].get_right() + RIGHT * 0.05,
+                      vec.get_left() + LEFT * 0.08,
+                      color=ACCENT, stroke_width=2.2, buff=0.06,
+                      max_tip_length_to_length_ratio=0.18)
+        self.play(GrowArrow(a_out), Write(vec), run_time=0.9)
+        dim_note = Text("Một điểm trong không gian đặc trưng 2D",
+                        font=FONT, font_size=15, color=SLATE_GRAY)
+        dim_note.next_to(vec, DOWN, buff=0.20)
+        self.play(FadeIn(dim_note, shift=UP * 0.08), run_time=0.5)
+        self.wait(0.7)
+
+        # ── Mini scatter axes — placed in lower-center, ABOVE caption ─────────
+        mini_ax = Axes(
             x_range=[0, 1, 0.5], y_range=[0, 1, 0.5],
-            x_length=3.0, y_length=2.6,
-            axis_config={"stroke_width": 1.5, "color": WHITE, "stroke_opacity": 0.50},
+            x_length=3.20, y_length=2.50,
+            axis_config={"stroke_width": 1.4, "color": WHITE,
+                         "stroke_opacity": 0.45},
             tips=True,
-        ).to_edge(DOWN, buff=0.30).shift(RIGHT * 0.5)
+        ).move_to(DOWN * 1.55 + LEFT * 0.20)
 
-        xa = Text("Face score", font=FONT, font_size=13, color=SLATE_GRAY)
-        xa.next_to(mini_axes.x_axis.get_end(), DR, buff=0.10)
-        ya = Text("Fingerprint", font=FONT, font_size=13, color=SLATE_GRAY)
-        ya.rotate(PI / 2).next_to(mini_axes.y_axis, LEFT, buff=0.18).shift(UP * 0.5)
+        xa = Text("Face score", font=FONT, font_size=12, color=SLATE_GRAY)
+        xa.next_to(mini_ax.x_axis.get_end(), DR, buff=0.08)
+        ya = Text("Fingerprint", font=FONT, font_size=12, color=SLATE_GRAY)
+        ya.rotate(PI / 2).next_to(mini_ax.y_axis.get_end(), UL, buff=0.06)
 
-        self.play(FadeIn(mini_axes), FadeIn(xa), FadeIn(ya), run_time=0.7)
+        self.play(FadeIn(mini_ax), FadeIn(xa), FadeIn(ya), run_time=0.65)
 
-        # Plot the example vector point
-        vec_dot = Dot(mini_axes.c2p(0.78, 0.45), color=CLASS_B_COLOR, radius=0.11)
-        dot_lbl = MathTex(r"\mathbf{x}", color=CLASS_B_COLOR, font_size=26)
-        dot_lbl.next_to(vec_dot, UR, buff=0.10)
+        # The example vector point (larger, highlighted)
+        v_dot = Dot(mini_ax.c2p(0.80, 0.70),
+                    color=CLASS_B_COLOR, radius=0.12)
+        v_lbl = MathTex(r"\mathbf{x}", color=CLASS_B_COLOR, font_size=24)
+        v_lbl.next_to(v_dot, UR, buff=0.09)
+        self.play(FadeIn(v_dot, scale=0.4), FadeIn(v_lbl), run_time=0.55)
 
-        self.play(FadeIn(vec_dot, scale=0.4), FadeIn(dot_lbl), run_time=0.6)
+        # Genuine cluster (upper-right)
+        gen_pts = [(0.74, 0.62), (0.82, 0.75), (0.70, 0.68), (0.86, 0.60)]
+        # Impostor cluster (lower-left)
+        imp_pts = [(0.22, 0.20), (0.30, 0.28), (0.18, 0.32), (0.26, 0.15)]
 
-        # Scatter a few more sample points for genuine/impostor
-        sample_pts_genuine = [
-            (0.72, 0.58), (0.81, 0.49), (0.68, 0.55), (0.85, 0.62),
-        ]
-        sample_pts_impostor = [
-            (0.22, 0.18), (0.30, 0.25), (0.15, 0.32), (0.28, 0.12),
-        ]
         gen_dots = VGroup(*[
-            Dot(mini_axes.c2p(*p), color=GENUINE_COLOR, radius=0.07)
-            for p in sample_pts_genuine
+            Dot(mini_ax.c2p(*p), color=GENUINE_COLOR,  radius=0.07)
+            for p in gen_pts
         ])
         imp_dots = VGroup(*[
-            Dot(mini_axes.c2p(*p), color=IMPOSTOR_COLOR, radius=0.07)
-            for p in sample_pts_impostor
+            Dot(mini_ax.c2p(*p), color=IMPOSTOR_COLOR, radius=0.07)
+            for p in imp_pts
         ])
-
         self.play(
-            LaggedStart(*[FadeIn(d, scale=0.4) for d in gen_dots], lag_ratio=0.12),
-            LaggedStart(*[FadeIn(d, scale=0.4) for d in imp_dots], lag_ratio=0.12),
-            run_time=1.0,
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in gen_dots], lag_ratio=0.10),
+            LaggedStart(*[FadeIn(d, scale=0.4) for d in imp_dots], lag_ratio=0.10),
+            run_time=0.9,
         )
         self.wait(0.5)
 
-        # Bridge text
-        bridge_box = RoundedRectangle(
-            width=7.6, height=0.80, corner_radius=0.16,
-            fill_color="#0D0F1E", fill_opacity=0.95,
-            stroke_color=ACCENT, stroke_width=1.5,
-        ).to_edge(DOWN, buff=0.12).shift(LEFT * 1.0)
+        # Legend — to the right of the scatter, won't overlap caption
+        leg_g = VGroup(
+            Dot(color=GENUINE_COLOR,  radius=0.08),
+            Text("Genuine",  font=FONT, font_size=13, color=GENUINE_COLOR),
+        ).arrange(RIGHT, buff=0.10)
+        leg_i = VGroup(
+            Dot(color=IMPOSTOR_COLOR, radius=0.08),
+            Text("Impostor", font=FONT, font_size=13, color=IMPOSTOR_COLOR),
+        ).arrange(RIGHT, buff=0.10)
+        legend = VGroup(leg_g, leg_i).arrange(DOWN, aligned_edge=LEFT, buff=0.12)
+        legend.next_to(mini_ax, RIGHT, buff=0.30)
+        self.play(FadeIn(legend), run_time=0.5)
+        self.wait(0.4)
 
-        bridge_text = Text(
-            "Tiếp theo → SVM tìm đường phân chia tối ưu trong không gian này",
+        # ── Bridge caption at the very bottom edge (below everything) ─────────
+        bridge_bg = RoundedRectangle(
+            width=11.0, height=0.68, corner_radius=0.14,
+            fill_color="#0D0F1E", fill_opacity=0.96,
+            stroke_color=ACCENT, stroke_width=1.6,
+        ).to_edge(DOWN, buff=0.12)
+        bridge_txt = Text(
+            "Tiep theo → SVM tim duong phan chia toi uu trong khong gian nay",
             font=FONT, font_size=18, color=ACCENT,
-        ).move_to(bridge_box)
+        ).move_to(bridge_bg)
+        self.play(FadeIn(bridge_bg, shift=UP * 0.08),
+                  Write(bridge_txt), run_time=1.0)
+        self.wait(2.2)
 
-        self.play(FadeIn(bridge_box, shift=UP * 0.1), Write(bridge_text), run_time=1.1)
-        self.wait(2.0)
-
-        # ── Final fade out ────────────────────────────────────────────────────
-        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.4)
-        self.wait(0.5)
+        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.2)
+        self.wait(0.4)
