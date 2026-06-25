@@ -20,11 +20,7 @@ def gaussian(x: float, mu: float, sigma: float) -> float:
 
 
 def min_func(f, g):
-    """Return a callable that evaluates min(f(x), g(x)) point-wise.
-
-    Useful for computing the visual overlap area between
-    genuine and impostor score distributions.
-    """
+    """Return a callable that evaluates min(f(x), g(x)) point-wise."""
     return lambda x: min(f(x), g(x))
 
 
