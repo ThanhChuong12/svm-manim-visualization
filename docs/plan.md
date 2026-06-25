@@ -34,6 +34,22 @@ Tài liệu này ghi lại chi tiết cấu trúc kịch bản và kế hoạch 
 
 ---
 
+## 🎬 Part 1.5: Biometric Score Pipeline Walkthrough (`part1_5_pipeline.py`)
+**Mục tiêu:** Trình bày quy trình chi tiết (End-to-End Pipeline) của một hệ thống sinh trắc học đa phương thức và nhấn mạnh tầm quan trọng của chuẩn hóa điểm số (Score Normalization).
+
+- **Phase 0: Title card**
+  Màn hình tiêu đề giới thiệu về Biometric Score Pipeline.
+- **Phase 1: Fusion-level comparison table**
+  Bảng so sánh các cấp độ dung hợp (Sensor, Feature, Score, Decision) để giải thích vì sao Score-level lại được lựa chọn nhiều nhất.
+- **Phase 2: Pipeline walkthrough**
+  Sơ đồ kiến trúc của hệ thống sinh trắc học từ Raw Input qua Matcher, sau đó so khớp với cơ sở dữ liệu để sinh ra điểm thô (Raw Score).
+- **Phase 3: Normalization side-by-side bar chart**
+  Biểu đồ thanh so sánh điểm số trước và sau khi chuẩn hóa (Min-Max), cho thấy lý do tại sao phải đưa về chung hệ quy chiếu [0, 1].
+- **Phase 4: Bridge — fusion node → 2-D scatter → teaser**
+  Chuyển tiếp từ kết quả điểm chuẩn hóa thành một tọa độ duy nhất (vector 2D), bước đệm hoàn hảo để bước vào Part 2.
+
+---
+
 ## 🎬 Part 2: Score Fusion & Linear SVM (`part2_score_fusion.py`)
 **Mục tiêu:** Giới thiệu quá trình dung hợp (Fusion) và dạy cho người xem cách hoạt động của mô hình Support Vector Machine (SVM) tuyến tính.
 
@@ -62,6 +78,26 @@ Tài liệu này ghi lại chi tiết cấu trúc kịch bản và kế hoạch 
   Khung cảnh 3D quay tròn mãn nhãn. Một mặt phẳng 2D (Hyperplane màu vàng rực) xuất hiện cắt ngang qua không gian 3D, phân tách hoàn hảo "đỉnh đồi" (dữ liệu thật) ra khỏi "thung lũng" (kẻ giả mạo).
 - **Phase 4: Projection Back to 2D**
   Chiếu mặt phẳng cắt 3D này dội ngược lại mặt phẳng 2D ban đầu. Lớp giao cắt tạo thành một vòng tròn bao bọc hoàn hảo cụm dữ liệu thật ở giữa, đánh dấu sự chiến thắng tuyệt đối của phi tuyến tính.
+- **Phase 5: Gamma Slider (Underfitting vs Overfitting)**
+  Thanh trượt điều chỉnh tham số Gamma. Cho thấy khi Gamma quá thấp sẽ dẫn đến underfitting, và Gamma quá cao sẽ bao bọc quá khít dẫn đến overfitting.
+- **Phase 6: Split-screen Linear vs RBF comparison**
+  Màn hình chia đôi so sánh trực tiếp sức mạnh của SVM tuyến tính so với SVM RBF.
+
+---
+
+## 🎬 Part 4: System Limitations & Conclusion (`part4_conclusion.py`)
+**Mục tiêu:** Phân tích thực tế các đánh đổi khi sử dụng hệ thống Multimodal Biometrics và tổng kết câu chuyện.
+
+- **Phase 1: Hardware Cost**
+  Sử dụng hiệu ứng cán cân và đồng xu rơi để minh họa việc triển khai nhiều cảm biến sinh trắc học sẽ tốn kém chi phí phần cứng hơn rất nhiều.
+- **Phase 2: Processing Latency**
+  So sánh đồng hồ bấm giờ: Unibiometric xử lý rất nhanh, nhưng Multimodal cần đồng bộ nhiều luồng dữ liệu, chuẩn hóa và đưa vào SVM dẫn đến độ trễ (latency) cao hơn.
+- **Phase 3: Privacy Risk**
+  Sự tập trung lượng lớn dữ liệu sinh trắc học tạo ra rủi ro quyền riêng tư lớn (Honeypot Target). Khi dữ liệu bị rò rỉ, sinh trắc học không thể "reset" như mật khẩu truyền thống.
+- **Phase 4: Wrap-up**
+  Màn hình chia đôi tóm lược: 1D Unimodal thì yếu đuối, dễ qua mặt. Multimodal 3D SVM thì kiên cố như lá chắn bảo vệ, bù lại là sự đánh đổi xứng đáng về chi phí, độ trễ và rủi ro.
+- **Phase 5: Callback to Part 0**
+  Vòng lặp lại cảnh bài toán XOR ở Part 0, chính thức kết thúc hành trình chứng minh lý do "vì sao một đường thẳng không bao giờ là đủ".
 
 ---
 *(Tài liệu này đóng vai trò như kịch bản gốc để đối chiếu khi nâng cấp mã nguồn Manim)*
