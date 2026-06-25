@@ -22,7 +22,7 @@ except ImportError:
     CLASS_B_COLOR    = "#00C2D1"
     HYPERPLANE_COLOR = "#F9DC5C"
     BG_COLOR         = "#0B0C10"
-    FONT_MAIN        = "Montserrat"
+    FONT_MAIN        = "Roboto"
     SLATE_GRAY       = "#888888"
 
     def generate_cluster(center, n=14, sigma=0.15, seed=None):

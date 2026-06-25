@@ -19,7 +19,7 @@ except ImportError:
     OVERLAP_COLOR    = "#9B59B6"
     THRESHOLD_COLOR  = "#F39C12"
     BG_COLOR         = "#0B0C10"
-    FONT_MAIN        = "Montserrat"
+    FONT_MAIN        = "Roboto"
     SLATE_GRAY       = "#888888"
     HYPERPLANE_COLOR = "#F9DC5C"
 

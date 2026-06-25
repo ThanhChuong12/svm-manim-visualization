@@ -1,11 +1,4 @@
-"""System Limitations & Conclusion — Real-world trade-offs of biometric fusion.
-
-Phase 1: Hardware Cost (Balance scale, multiple sensors, bouncing coins)
-Phase 2: Processing Latency (Stopwatch, multi-stage progress bars)
-Phase 3: Privacy Risk (Binary streams, honeypot swell, hacker attack, data leak)
-Phase 4: Wrap-up (Split screen: 1D vulnerability vs SVM 3D Shield)
-Phase 5: Callback to Part 0 (XOR Trap / narrative closure)
-"""
+"""System Limitations & Conclusion scene."""
 
 import os
 import sys
@@ -19,7 +12,7 @@ GENUINE_COLOR    = "#2ECC71"
 IMPOSTOR_COLOR   = "#E74C3C"
 HYPERPLANE_COLOR = "#F9DC5C"
 BG_COLOR         = "#0B0C10"
-FONT_MAIN        = "Montserrat"
+FONT_MAIN        = "Roboto"
 SLATE_GRAY       = "#888888"
 CLASS_A_COLOR    = "#FF5E5E"  # Red class color matching Part 0
 CLASS_B_COLOR    = "#00C2D1"  # Blue class color

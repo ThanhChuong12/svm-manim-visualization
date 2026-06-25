@@ -30,7 +30,7 @@ except ImportError:
     IMPOSTOR_COLOR   = "#E74C3C"
     HYPERPLANE_COLOR = "#F9DC5C"
     BG_COLOR         = "#0B0C10"
-    FONT_MAIN        = "Montserrat"
+    FONT_MAIN        = "Roboto"
     SLATE_GRAY       = "#888888"
     CLASS_A_COLOR    = "#FF5E5E"
     CLASS_B_COLOR    = "#00C2D1"
