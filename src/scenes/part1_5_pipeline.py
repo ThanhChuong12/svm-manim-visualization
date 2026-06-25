@@ -1,33 +1,11 @@
-"""
-Part 1.5 — Biometric Score Pipeline Walkthrough  (v3 — full English, zero overlap)
-====================================================================================
-Scene order:
-  Phase 0 : Title card
-  Phase 1 : Fusion-level comparison table  (4 rows, dim non-score rows)
-  Phase 2 : Pipeline walkthrough  (textbook-accurate, clean layout)
-  Phase 3 : Normalization side-by-side bar chart
-  Phase 4 : Bridge — fusion node → 2-D scatter → teaser
-
-Layout rules (v3):
-  • ALL text in English — no Vietnamese
-  • Pipeline uses TWO completely separate horizontal rows,
-    joined by a single clean vertical drop arrow on the RIGHT side.
-    Row 1 (top)   : Raw Input → Quality Check → Feature Extract → Matcher
-    Row 2 (bottom): Raw Score → Normalize → Score Fusion → Decision
-    Database cylinder sits to the RIGHT of the canvas, feeds Matcher from right.
-    The vertical connector goes: Matcher.bottom → straight down → Raw Score.top
-    (Raw Score is placed directly below Matcher — same x-centre.)
-  • Every caption lives in a fixed bar at the very bottom (y = -3.6).
-    Nothing else is drawn in that zone.
-  • Bridge phase: fusion node on the LEFT half only; scatter axes on the RIGHT
-    half only; caption bar at bottom — three zones never overlap.
-"""
+"""Biometric Score Pipeline Walkthrough scene."""
 
 from __future__ import annotations
+import os
 import numpy as np
 from manim import *
 
-# ── palette ───────────────────────────────────────────────────────────────────
+# palette
 BG        = "#0B0C10"
 GOLD      = "#F9DC5C"
 CYAN      = "#00C2D1"
@@ -39,23 +17,22 @@ TEAL      = "#00BFA5"
 GRAY      = "#666677"
 NFILL     = "#12151F"
 NSTROKE   = "#3A3F55"
-FONT      = "Montserrat"
+FONT      = "Roboto"
 
-# safe y-zones (Manim default frame: ±4 vertical, ±7.1 horizontal)
-CAP_Y     = -3.45          # caption bar centre-y  (bottom zone)
-SAFE_BOT  = CAP_Y + 0.55  # lowest y any non-caption element may use
+# safe y-zones
+CAP_Y     = -3.45 
+SAFE_BOT  = CAP_Y + 0.55
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# helpers
 def nd(label: str, sub: str = "", w=2.30, h=0.88,
        sc=NSTROKE, fc=NFILL, ls=18, ss=12) -> VGroup:
-    """Rounded-rect pipeline node."""
     box = RoundedRectangle(width=w, height=h, corner_radius=0.15,
                            fill_color=fc, fill_opacity=1, stroke_color=sc, stroke_width=2)
-    lbl = Text(label, font=FONT, font_size=ls, color=WHITE)
+    lbl = MarkupText(label, font=FONT, font_size=ls, color=WHITE)
     lbl.move_to(box)
     g = VGroup(box, lbl)
     if sub:
-        s = Text(sub, font=FONT, font_size=ss, color=GRAY)
+        s = MarkupText(sub, font=FONT, font_size=ss, color=GRAY)
         s.move_to(box).shift(DOWN * h * 0.24)
         lbl.shift(UP * h * 0.16)
         g.add(s)
@@ -71,8 +48,6 @@ def varrow(a, b, col=GRAY) -> Arrow:
                  color=col, stroke_width=2.2, buff=0.10,
                  max_tip_length_to_length_ratio=0.18)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
 class PipelineScene(Scene):
 
     def construct(self):
@@ -83,11 +58,11 @@ class PipelineScene(Scene):
         self._normalization()
         self._bridge()
 
-    # ── 0. Title ──────────────────────────────────────────────────────────────
+    # 0. Title
     def _title(self):
-        t1 = Text("Biometric Score Pipeline", font=FONT, weight=BOLD,
+        t1 = MarkupText("Biometric Score Pipeline", font=FONT, weight=BOLD,
                   font_size=52, color=WHITE)
-        t2 = Text("From raw input to final decision",
+        t2 = MarkupText("From raw input to final decision",
                   font=FONT, font_size=26, slant=ITALIC, color=GOLD)
         t2.next_to(t1, DOWN, buff=0.30)
         bar = Line(LEFT*4, RIGHT*4, color=GOLD, stroke_width=1.6)
@@ -98,9 +73,9 @@ class PipelineScene(Scene):
         self.wait(1.0)
         self.play(FadeOut(g), run_time=0.55)
 
-    # ── 1. Fusion-level table ─────────────────────────────────────────────────
+    # 1. Fusion-level table
     def _fusion_table(self):
-        head = Text("Why Score-Level Fusion?",
+        head = MarkupText("Why Score-Level Fusion?",
                     font=FONT, weight=BOLD, font_size=34, color=GOLD)
         head.to_edge(UP, buff=0.30)
         self.play(FadeIn(head, shift=DOWN*0.08), run_time=0.55)
@@ -112,7 +87,7 @@ class PipelineScene(Scene):
         def cell(txt, w, h, fc=NFILL, sc=NSTROKE, tc=WHITE, fs=15):
             box = Rectangle(width=w, height=h, fill_color=fc, fill_opacity=1,
                             stroke_color=sc, stroke_width=1.2)
-            lbl = Text(txt, font=FONT, font_size=fs, color=tc)
+            lbl = MarkupText(txt, font=FONT, font_size=fs, color=tc)
             if lbl.width > w - 0.16:
                 lbl.scale((w - 0.16) / lbl.width)
             lbl.move_to(box)
@@ -165,7 +140,7 @@ class PipelineScene(Scene):
 
         glow = SurroundingRectangle(drows[2], color=GREEN,
                                     stroke_width=3.0, buff=0.05, corner_radius=0.04)
-        tag  = Text("← Our choice", font=FONT, font_size=15, color=GREEN)
+        tag  = MarkupText("← Our choice", font=FONT, font_size=15, color=GREEN)
         tag.next_to(drows[2], RIGHT, buff=0.18)
         self.play(Create(glow), FadeIn(tag, shift=LEFT*0.14), run_time=0.7)
         self.wait(0.5)
@@ -177,7 +152,7 @@ class PipelineScene(Scene):
             "+ Preserves probability info (soft decision)",
         ]
         bullets = VGroup(*[
-            Text(b, font=FONT, font_size=14, color=GREEN) for b in blines
+            MarkupText(b, font=FONT, font_size=14, color=GREEN) for b in blines
         ]).arrange(DOWN, aligned_edge=LEFT, buff=0.14)
         bullets.next_to(table, DOWN, buff=0.28)
         # clamp so bottom edge stays above CAP_Y
@@ -190,25 +165,15 @@ class PipelineScene(Scene):
         self.play(FadeOut(VGroup(head, table, glow, tag, bullets)), run_time=0.8)
         self.wait(0.15)
 
-    # ── 2. Pipeline ───────────────────────────────────────────────────────────
+    # 2. Pipeline
     def _pipeline(self):
-        """
-        Clean two-row layout with correct arrow directions.
-
-        Row 1 (y=+1.6):  [RawInput]→[QualCheck]→[FeatExtract]→[Matcher]
-        Row 2 (y=-0.55): [RawScore]→[Normalize]→[ScoreFusion]→[Decision]
-
-        Matcher and RawScore share the SAME x-centre.
-        A straight vertical arrow goes Matcher.bottom → RawScore.top.
-
-        Database cylinder is placed ABOVE Matcher (not beside it).
-        """
+        """Pipeline layout setup."""
         ROW1_Y =  1.60
         ROW2_Y = -0.65
         # x-centres for 4 columns
         XS = [-5.20, -1.90,  1.40,  4.70]  # col 0..3
 
-        head = Text("End-to-End Pipeline", font=FONT, weight=BOLD,
+        head = MarkupText("End-to-End Pipeline", font=FONT, weight=BOLD,
                     font_size=30, color=GOLD)
         head.to_edge(UP, buff=0.26)
         self.play(FadeIn(head, shift=DOWN*0.07), run_time=0.50)
@@ -220,20 +185,20 @@ class PipelineScene(Scene):
             stroke_color=GRAY, stroke_width=0.9,
         )
         cap_bg.move_to([0, CAP_Y, 0])
-        cap_txt = Text("", font=FONT, font_size=16, color=WHITE)
+        cap_txt = MarkupText("", font=FONT, font_size=16, color=WHITE)
         cap_txt.move_to(cap_bg)
         self.play(FadeIn(cap_bg), run_time=0.25)
         cur_cap = cap_txt
 
         def caption(s: str, col=WHITE):
             nonlocal cur_cap
-            new = Text(s, font=FONT, font_size=16, color=col)
+            new = MarkupText(s, font=FONT, font_size=16, color=col)
             new.move_to(cap_bg)
             if new.width > 13.2:
                 new.scale(13.2 / new.width)
             self.play(Transform(cur_cap, new), run_time=0.38)
 
-        # ── Row 1 nodes ───────────────────────────────────────────────────────
+        # Row 1 nodes
         n_raw  = nd("Raw Input",       "Image / Audio",    w=2.18, sc=CYAN)
         n_qual = nd("Quality\nCheck",  "Sharpness / Wet",  w=2.18, sc=TEAL,  ls=17)
         n_feat = nd("Feature\nExtract","Minutiae / MFCC",  w=2.18, ls=17)
@@ -242,39 +207,20 @@ class PipelineScene(Scene):
         for node_obj, xi in zip([n_raw, n_qual, n_feat, n_mat], XS):
             node_obj.move_to([xi, ROW1_Y, 0])
 
-        # ── Row 2 nodes ───────────────────────────────────────────────────────
+        # Row 2 nodes
         n_scr  = nd("Raw Score",    "Different units!",  w=2.18, sc=PURPLE)
         n_norm = nd("Normalize",    "Min-Max / Z-score", w=2.18, sc=PURPLE)
         n_fuse = nd("Score Fusion", "SVM vector",        w=2.18, sc=GOLD)
         n_dec  = nd("Decision",     "Accept / Reject",   w=2.18, sc=GREEN)
 
-        # Raw Score sits DIRECTLY below Matcher (same x = XS[3])
-        # Then row 2 goes RIGHT→LEFT: score, norm, fuse, dec at XS[3],[2],[1],[0]... 
-        # Actually we keep left-to-right reading order:
-        # RawScore @ XS[3], Normalize @ XS[2], ScoreFusion @ XS[1], Decision @ XS[0]
-        # Arrow direction: RawScore→Normalize→ScoreFusion→Decision  (right to left)
-        # That looks odd. Better: keep same left-to-right column order for row 2
-        # but map: col0=RawScore, col1=Normalize, col2=ScoreFusion, col3=Decision
-        # and put RawScore at XS[3] (below Matcher) with a bend going LEFT.
-        # Cleanest solution used by professional infographics:
-        #   Row 2 left-to-right: Decision | ScoreFusion | Normalize | RawScore
-        #   i.e. reverse order → read right-to-left with a "U-bend"
-        # 
-        # We use this snake pattern:
-        #   Row1:  RawInput(0)→QualCheck(1)→FeatExtract(2)→Matcher(3)
-        #                                                       ↓
-        #   Row2:  Decision(0)←ScoreFusion(1)←Normalize(2)←RawScore(3)
-        # Arrows in row2 point LEFT (←) which is fine visually.
-
+        # Row 2 uses a reverse order to read right-to-left:
         for node_obj, xi in zip([n_dec, n_fuse, n_norm, n_scr], XS):
             node_obj.move_to([xi, ROW2_Y, 0])
 
-        # ── Database cylinder above Matcher ───────────────────────────────────
-        # Cylinder sized so text has clear padding from all edges.
-        # Strategy: measure labels first, then size rect around them.
-        DW     = 2.40    # cylinder width
-        BODY_H = 1.00    # rect body (tall enough for two padded lines)
-        CAP_H  = 0.38    # ellipse cap height
+        # Database cylinder 
+        DW     = 2.40    
+        BODY_H = 1.00    
+        CAP_H  = 0.38    
 
         db_rect = Rectangle(
             width=DW, height=BODY_H,
@@ -294,10 +240,9 @@ class PipelineScene(Scene):
         db_top.move_to(db_rect.get_top())
         db_bot.move_to(db_rect.get_bottom())
 
-        # Labels: font sizes chosen so max width < DW - 0.40 (0.20 pad each side)
-        db_lbl = Text("Database", font=FONT, font_size=15,
+        db_lbl = MarkupText("Database", font=FONT, font_size=15,
                       color=ORANGE, weight=BOLD)
-        db_sub = Text("Stored Templates", font=FONT, font_size=11, color=GRAY)
+        db_sub = MarkupText("Stored Templates", font=FONT, font_size=11, color=GRAY)
 
         # Force-clamp widths to (DW - 0.42) if overlong
         PAD_W = DW - 0.42
@@ -313,38 +258,32 @@ class PipelineScene(Scene):
         db_cyl = VGroup(db_rect, db_bot, db_top, db_lbl, db_sub)
         db_cyl.next_to(n_mat, UP, buff=0.40)
 
-        # modality-1 badge
-        mod1 = Text("Modality 1  (e.g. Face)", font=FONT, font_size=13, color=CYAN)
+        mod1 = MarkupText("Modality 1  (e.g. Face)", font=FONT, font_size=13, color=CYAN)
         mod1.next_to(VGroup(n_raw, n_qual, n_feat), UP, buff=0.22)
 
-        # ── Arrows ────────────────────────────────────────────────────────────
-        # Row 1 (left → right)
+        # Arrows
         arr_rq = harrow(n_raw,  n_qual, CYAN)
         arr_qf = harrow(n_qual, n_feat, TEAL)
         arr_fm = harrow(n_feat, n_mat)
 
-        # DB → Matcher (vertical down)
+        # DB -> Matcher (vertical down)
         arr_db = Arrow(db_cyl.get_bottom() + DOWN*0.04,
                        n_mat[0].get_top()  + UP*0.04,
                        color=ORANGE, stroke_width=2.0, buff=0,
                        max_tip_length_to_length_ratio=0.20)
 
-        # Matcher → RawScore (vertical drop, same x-column XS[3])
+        # Matcher -> RawScore
         arr_drop = Arrow(n_mat[0].get_bottom() + DOWN*0.04,
                          n_scr[0].get_top()    + UP*0.04,
                          color=PURPLE, stroke_width=2.2, buff=0,
                          max_tip_length_to_length_ratio=0.20)
 
         # Modality-2 tag beside the drop arrow (right side, won't overlap)
-        mod2 = Text("Modality 2\n(same process)", font=FONT, font_size=11, color=GRAY)
+        mod2 = MarkupText("Modality 2\n(same process)", font=FONT, font_size=11, color=GRAY)
         mod2.next_to(arr_drop, RIGHT, buff=0.14)
 
-        # Row 2 (right → left)
-        arr_sn = harrow(n_scr,  n_norm, PURPLE)   # but harrow uses get_right/get_left
-        # n_scr is at XS[3]=right, n_norm at XS[2] → n_scr.left to n_norm.right? No.
-        # harrow goes a.right→b.left. Since n_scr(XS[3]) > n_norm(XS[2]),
-        # n_scr.get_left() is the inner edge. We need arrows going LEFT.
-        # Override: use Arrow directly.
+        # Row 2 (right -> left)
+        # Custom arrow pointing left for Row 2
         def larrow(a, b, col=GRAY):
             return Arrow(a.get_left(), b.get_right(),
                          color=col, stroke_width=2.2, buff=0.10,
@@ -428,34 +367,21 @@ class PipelineScene(Scene):
         )), run_time=0.90)
         self.wait(0.20)
 
-    # ── 3. Normalization bar chart ────────────────────────────────────────────
+    # 3. Normalization bar chart
     def _normalization(self):
-        """
-        Layout (v4 — no overlaps guaranteed):
-
-        Vertical zones:
-          y ∈ [ 1.6,  3.6] : problem / ok badges + titles
-          y ∈ [-0.9,  1.6] : both axes + bars + x-labels   (CHART_Y = +0.55)
-          y ∈ [-1.9, -0.9] : x-labels bottom padding
-          y ∈ [-3.2, -1.9] : formula box  (completely separate zone)
-          y ∈ [-3.6, -3.2] : caption / safe margin
-
-        X-labels use TWO-line text so they fit without wrapping into formula.
-        Formula box is placed at fixed y = -2.55  (between x-labels and CAP_Y).
-        Charts are shifted UP so their baselines land at ~y = -0.85.
-        """
-        head = Text("Why Normalize Scores First?",
+        """Side-by-side bar chart for normalization."""
+        head = MarkupText("Why Normalize Scores First?",
                     font=FONT, weight=BOLD, font_size=30, color=PURPLE)
         head.to_edge(UP, buff=0.28)
         self.play(FadeIn(head, shift=DOWN * 0.07), run_time=0.55)
 
-        # ── geometry ─────────────────────────────────────────────────────────
-        CHART_Y = 0.55      # chart centres shifted UP to leave formula room
-        CHART_H = 2.60      # slightly shorter so baseline is at ~-0.75
+        # geometry
+        CHART_Y = 0.55      
+        CHART_H = 2.60      
         L_X     = -3.80
         R_X     =  3.80
 
-        # ── LEFT: raw scores chart ────────────────────────────────────────────
+        # LEFT: raw scores chart
         ax_l = Axes(
             x_range=[0, 4, 1], y_range=[0, 1000, 250],
             x_length=3.6, y_length=CHART_H,
@@ -480,23 +406,23 @@ class PipelineScene(Scene):
                             fill_color=col, fill_opacity=0.85, stroke_width=0)
             bx = ax_l.c2p(xi, 0)[0]
             bar.move_to([bx, base_l + h / 2, 0])
-            vt = Text(str(val), font=FONT, font_size=12, color=col)
+            vt = MarkupText(str(val), font=FONT, font_size=12, color=col)
             vt.next_to(bar, UP, buff=0.05)
             raw_bars.add(VGroup(bar, vt))
             # x-label: fixed 0.52 below baseline
-            xl = Text(xlbl, font=FONT, font_size=11, color=col)
+            xl = MarkupText(xlbl, font=FONT, font_size=11, color=col)
             xl.move_to([bx, base_l - 0.52, 0])
             raw_xlbls.add(xl)
 
-        left_title = Text("Raw scores — incompatible units",
+        left_title = MarkupText("Raw scores — incompatible units",
                           font=FONT, font_size=14, color=GRAY)
         left_title.next_to(ax_l, UP, buff=0.16)
 
-        prob = Text("[!]  Finger 850  >>  Face 0.05 — cannot merge!",
+        prob = MarkupText("[!]  Finger 850  >>  Face 0.05 — cannot merge!",
                     font=FONT, font_size=13, color=RED)
         prob.next_to(left_title, UP, buff=0.14)
 
-        # ── RIGHT: normalized chart ───────────────────────────────────────────
+        # RIGHT: normalized chart
         ax_r = Axes(
             x_range=[0, 4, 1], y_range=[0, 1.1, 0.25],
             x_length=3.6, y_length=CHART_H,
@@ -520,17 +446,17 @@ class PipelineScene(Scene):
                             fill_color=col, fill_opacity=0.85, stroke_width=0)
             bx = ax_r.c2p(xi, 0)[0]
             bar.move_to([bx, base_r + h / 2, 0])
-            vt = Text(f"{val:.2f}", font=FONT, font_size=12, color=col)
+            vt = MarkupText(f"{val:.2f}", font=FONT, font_size=12, color=col)
             vt.next_to(bar, UP, buff=0.05)
             norm_bars.add(VGroup(bar, vt))
-            xl = Text(xlbl, font=FONT, font_size=11, color=col)
+            xl = MarkupText(xlbl, font=FONT, font_size=11, color=col)
             xl.move_to([bx, base_r - 0.42, 0])
             norm_xlbls.add(xl)
 
-        right_title = Text("After Min-Max Normalization  [0, 1]",
+        right_title = MarkupText("After Min-Max Normalization  [0, 1]",
                            font=FONT, font_size=14, color=PURPLE)
         right_title.next_to(ax_r, UP, buff=0.16)
-        ok_badge = Text("[OK]  Same scale — fair comparison!",
+        ok_badge = MarkupText("[OK]  Same scale — fair comparison!",
                         font=FONT, font_size=13, color=GREEN)
         ok_badge.next_to(right_title, UP, buff=0.14)
 
@@ -541,14 +467,10 @@ class PipelineScene(Scene):
             color=PURPLE, stroke_width=2.6, buff=0.05,
             max_tip_length_to_length_ratio=0.22,
         )
-        t_lbl = Text("Normalize", font=FONT, font_size=14, color=PURPLE)
+        t_lbl = MarkupText("Normalize", font=FONT, font_size=14, color=PURPLE)
         t_lbl.next_to(t_arr, UP, buff=0.10)
 
-        # ── Formula box — pinned in its own zone below both charts ────────────
-        # Lowest x-label bottom ≈ base_l - 0.52 - label_height (~0.28 for 2-line)
-        # ≈  base_l - 0.80.  Formula top must be BELOW that.
-        # We fix formula centre at y = -2.55, size h=1.10 → top=-2.00, bot=-3.10
-        # That's well below x-labels and well above CAP_Y(-3.45).
+        # Formula box
         FORM_CY = -2.55
         f_bg = RoundedRectangle(
             width=5.8, height=1.10, corner_radius=0.16,
@@ -561,7 +483,7 @@ class PipelineScene(Scene):
             color=WHITE, font_size=36,
         ).move_to(f_bg)
 
-        # ── Animation ─────────────────────────────────────────────────────────
+        # Animation
         self.play(FadeIn(ax_l), FadeIn(left_title), run_time=0.60)
         self.play(
             LaggedStart(*[FadeIn(b, shift=UP * 0.22) for b in raw_bars],
@@ -594,38 +516,15 @@ class PipelineScene(Scene):
         )), run_time=0.90)
         self.wait(0.20)
 
-    # ── 4. Bridge ─────────────────────────────────────────────────────────────
+    # 4. Bridge
     def _bridge(self):
-        """
-        v4 layout — strict column separation, zero overlap guaranteed.
-
-        SCREEN COLUMNS:
-          LEFT  col  x ∈ [-7.1, -0.6]:
-            Row A (y=+2.2)  : s1 label  →  arrives left edge of node
-            Row B (y=+0.6)  : fusion node (centred x=-1.8)
-            Row C (y=-1.0)  : output vector  x = [0.80, 0.70]
-            Row D (y=-2.2)  : "One point in 2-D feature space"
-            Each row is horizontally centred on x=-3.5 for labels,
-            node at x=-1.8. Arrows are clean horizontal lines.
-
-          RIGHT col  x ∈ [+0.6, +7.1]:
-            Scatter axes centred at x=+3.8, y=+0.4
-            y-label "Fingerprint" placed LEFT of y_axis with buff=0.35
-            x-label "Face score" placed DR of x_axis end
-            Legend: directly below axes
-            NO caption bar inside the scatter area
-
-          BOTTOM strip  y ∈ [-3.0, -3.6]:
-            Single caption bar — nothing else ever enters this zone.
-        """
-        head = Text("Fusion Vector  →  SVM Input",
+        """Transition from pipeline to SVM boundary visualization."""
+        head = MarkupText("Fusion Vector  →  SVM Input",
                     font=FONT, weight=BOLD, font_size=32, color=GOLD)
         head.to_edge(UP, buff=0.26)
         self.play(FadeIn(head, shift=DOWN * 0.07), run_time=0.50)
 
-        # ════════════════════  LEFT COLUMN  ══════════════════════════════════
-        # Labels shift LEFT by 0.8 unit: LBL_CX -4.40 → -5.20
-        # Node/vec/note shift RIGHT by 0.6 unit: NODE_CX -1.80 → -1.20
+        # LEFT COLUMN
         LBL_CX  = -5.20
         NODE_CX = -1.20
         COL_SEP = -0.60
@@ -636,18 +535,18 @@ class PipelineScene(Scene):
         VEC_Y   = -0.55
         NOTE_Y  = -1.60
 
-        # Score labels — shorter text so they fit
-        s1 = Text("Face score (norm):   s₁ = 0.80",
+        # Score labels
+        s1 = MarkupText("Face score (norm):   s₁ = 0.80",
                   font=FONT, font_size=17, color=CYAN)
-        s2 = Text("Fingerprint (norm):  s₂ = 0.70",
+        s2 = MarkupText("Fingerprint (norm):  s₂ = 0.70",
                   font=FONT, font_size=17, color=GREEN)
 
-        # Left-anchor so text never bleeds off screen
+        # Left-anchor so MarkupText never bleeds off screen
         s1.move_to([LBL_CX, S1_Y, 0])
         s2.move_to([LBL_CX, S2_Y, 0])
 
         # Clamp if too wide
-        MAX_LBL_W = COL_SEP - (-7.1) - 0.3   # ~6.2 units
+        MAX_LBL_W = COL_SEP - (-7.1) - 0.3
         for lbl in [s1, s2]:
             if lbl.width > MAX_LBL_W:
                 lbl.scale(MAX_LBL_W / lbl.width)
@@ -660,14 +559,14 @@ class PipelineScene(Scene):
         # Node left edge x
         node_lx = NODE_CX - 1.15
 
-        # Arrow s1 → node upper-left  (goes right and slightly down)
+        # Arrow s1 -> node upper-left
         a1 = Arrow(
             s1.get_right() + RIGHT * 0.08,
             np.array([node_lx, NODE_Y + 0.26, 0]),
             color=CYAN, stroke_width=2.2, buff=0.05,
             max_tip_length_to_length_ratio=0.18,
         )
-        # Arrow s2 → node lower-left
+        # Arrow s2 -> node lower-left
         a2 = Arrow(
             s2.get_right() + RIGHT * 0.08,
             np.array([node_lx, NODE_Y - 0.26, 0]),
@@ -675,7 +574,7 @@ class PipelineScene(Scene):
             max_tip_length_to_length_ratio=0.18,
         )
 
-        # Output vector below node — straight thick arrow, gold
+        # Output vector below node
         vec = MathTex(
             r"\mathbf{x} = \begin{bmatrix} 0.80 \\ 0.70 \end{bmatrix}",
             color=WHITE, font_size=40,
@@ -689,11 +588,11 @@ class PipelineScene(Scene):
             max_tip_length_to_length_ratio=0.16,
         )
 
-        dim_note = Text("One point in 2-D feature space",
+        dim_note = MarkupText("One point in 2-D feature space",
                         font=FONT, font_size=13, color=GRAY)
         dim_note.move_to([NODE_CX, NOTE_Y, 0])
 
-        # ── Animate left column sequentially ──────────────────────────────────
+        # Animate left column sequentially
         self.play(
             LaggedStart(
                 FadeIn(s1, shift=RIGHT * 0.20),
@@ -713,7 +612,7 @@ class PipelineScene(Scene):
         self.play(FadeIn(dim_note, shift=UP * 0.08), run_time=0.40)
         self.wait(0.50)
 
-        # ════════════════════  RIGHT COLUMN  ═════════════════════════════════
+        # RIGHT COLUMN
         AX_CX = 3.80
         AX_CY = 0.40
 
@@ -730,17 +629,17 @@ class PipelineScene(Scene):
             tips=True,
         ).move_to([AX_CX, AX_CY, 0])
 
-        # Guarantee axes bottom stays above SAFE_BOT (legend goes below)
+        # Guarantee axes bottom stays above SAFE_BOT
         ax_bot = mini_ax.get_bottom()[1]
-        if ax_bot < SAFE_BOT + 0.60:   # leave 0.6 for legend
+        if ax_bot < SAFE_BOT + 0.60:
             mini_ax.shift(UP * (SAFE_BOT + 0.60 - ax_bot))
 
         # Axis labels
-        xa = Text("Face score", font=FONT, font_size=12, color=GRAY)
+        xa = MarkupText("Face score", font=FONT, font_size=12, color=GRAY)
         xa.next_to(mini_ax.x_axis.get_end(), DR, buff=0.08)
 
-        # y-label: rotate then place well LEFT of the entire y-axis
-        ya = Text("Fingerprint", font=FONT, font_size=12, color=GRAY)
+        # y-label
+        ya = MarkupText("Fingerprint", font=FONT, font_size=12, color=GRAY)
         ya.rotate(PI / 2)
         ya.next_to(mini_ax.y_axis, LEFT, buff=0.36)
 
@@ -780,26 +679,21 @@ class PipelineScene(Scene):
             run_time=0.90,
         )
 
-        # ── Example point  x  ─────────────────────────────────────────────────
-        # Design rationale: x is a GENUINE sample being queried.
-        # We show it as a larger GREEN dot (same class colour) with a GOLD ring
-        # and a "x (query)" label — making it clear it belongs to the green cluster,
-        # not a separate mysterious cyan blob.
+        # Example point x
         XP = mini_ax.c2p(0.80, 0.70)
-
-        # Outer gold ring to make it stand out from the plain green dots
+        # Outer gold ring
         ring = Circle(radius=0.18, stroke_width=2.4, stroke_color=GOLD)
         ring.set_fill(opacity=0)
         ring.move_to(XP)
 
-        # Larger green dot (same colour = same class)
+        # Larger green dot
         v_dot = Dot(XP, color=GREEN, radius=0.14)
 
-        # Label with context
-        v_lbl = Text("x  (query)", font=FONT, font_size=13, color=GOLD, weight=BOLD)
+        # Label
+        v_lbl = MarkupText("x  (query)", font=FONT, font_size=13, color=GOLD, weight=BOLD)
         v_lbl.next_to(v_dot, UR, buff=0.12)
 
-        # Pulse ring (gold, expands once then disappears)
+        # Pulse ring
         pulse = Circle(radius=0.18, stroke_width=2.2, stroke_color=GOLD)
         pulse.set_fill(opacity=0).set_stroke(opacity=0.80)
         pulse.move_to(XP)
@@ -818,12 +712,12 @@ class PipelineScene(Scene):
         self.remove(pulse)
         self.wait(0.28)
 
-        # Legend — directly below axes, clamped above SAFE_BOT
+        # Legend
         leg_g = VGroup(Dot(color=GREEN, radius=0.09),
-                       Text("Genuine",  font=FONT, font_size=13, color=GREEN)
+                       MarkupText("Genuine",  font=FONT, font_size=13, color=GREEN)
                        ).arrange(RIGHT, buff=0.10)
         leg_i = VGroup(Dot(color=RED,   radius=0.09),
-                       Text("Impostor", font=FONT, font_size=13, color=RED)
+                       MarkupText("Impostor", font=FONT, font_size=13, color=RED)
                        ).arrange(RIGHT, buff=0.10)
         legend = VGroup(leg_g, leg_i).arrange(RIGHT, buff=0.30)
         legend.next_to(mini_ax, DOWN, buff=0.18)
@@ -833,14 +727,14 @@ class PipelineScene(Scene):
         self.play(FadeIn(legend), run_time=0.45)
         self.wait(0.50)
 
-        # ════════════════════  BOTTOM CAPTION  ═══════════════════════════════
+        # BOTTOM CAPTION
         br_bg = RoundedRectangle(
             width=13.2, height=0.65, corner_radius=0.13,
             fill_color="#0D0F1E", fill_opacity=0.97,
             stroke_color=GOLD, stroke_width=1.6,
         )
         br_bg.move_to([0, CAP_Y, 0])
-        br_txt = Text(
+        br_txt = MarkupText(
             "Next  →  SVM finds the optimal decision boundary in this space",
             font=FONT, font_size=17, color=GOLD,
         )
