@@ -683,7 +683,7 @@ class KernelTrickScene(ThreeDScene):
         )
         outro_group = VGroup(outro_bg, outro)
         self.add_fixed_in_frame_mobjects(outro_group)
-        outro_group.to_edge(DOWN, buff=0.35)
+        outro_group.to_edge(DOWN, buff=1.0)
         self.play(FadeIn(outro_group, shift=UP * 0.12), run_time=0.7)
         self.wait(1.5)
 

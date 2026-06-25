@@ -7,7 +7,7 @@ from manim import *
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Constants & Colors ────────────────────────────────────────────────────────
+# Constants and colors
 GENUINE_COLOR    = "#2ECC71"
 IMPOSTOR_COLOR   = "#E74C3C"
 HYPERPLANE_COLOR = "#F9DC5C"
@@ -21,7 +21,8 @@ GOLD_COLOR       = "#FFD700"
 FP_COLOR         = "#AABBFF"
 VOICE_COLOR      = "#D291FF"
 
-# ── Helper Icons (Vector drawn for standalone execution) ──────────────────────
+
+# Helper icons
 def make_genuine_icon(size=0.6):
     head = Ellipse(width=size*1.2, height=size*1.5, stroke_color=CLASS_B_COLOR, stroke_width=2, fill_color="#1A1D27", fill_opacity=1)
     eye_l = Dot(LEFT * size * 0.25 + UP * size * 0.2, radius=size*0.06, color=CLASS_B_COLOR)
@@ -56,10 +57,7 @@ def make_hacker_skull(size=0.7):
     eyes_r = eyes.copy().move_to(skull.get_center() + RIGHT*size*0.2)
     return VGroup(skull, jaw, eyes_l, eyes_r)
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Main Scene
-# ─────────────────────────────────────────────────────────────────────────────
-
 class SystemLimitationsScene(Scene):
     def construct(self):
         self.camera.background_color = BG_COLOR
@@ -70,15 +68,13 @@ class SystemLimitationsScene(Scene):
         self._show_wrap_up()
         self._show_callback_to_part0()
 
-    # =========================================================================
-    # Micro-animation 1: Hardware Cost (Balance scale with multiple sensors)
-    # =========================================================================
+    # Phase 1: Hardware cost (balance scale)
     def _show_cost_animation(self) -> None:
         title = Text("1. High Hardware/Deployment Cost", font=FONT_MAIN, font_size=28, weight=BOLD, color=HYPERPLANE_COLOR).to_edge(UP, buff=0.4)
         self.play(FadeIn(title, shift=DOWN * 0.15))
 
-        # Balance scale structure setup
-        fulcrum = Triangle(fill_color=SLATE_GRAY, fill_opacity=0.8, stroke_width=0).scale(0.4).move_to(DOWN * 1.5)
+        # Setup balance scale geometry
+        fulcrum = Triangle(fill_color=SLATE_GRAY, fill_opacity=0.8, stroke_width=0).scale(0.4).move_to(DOWN * 0.8)
         # Temporary line to determine exact pivot center
         temp_beam = Line(LEFT * 3, RIGHT * 3).next_to(fulcrum, UP, buff=0)
         pivot = temp_beam.get_center()
@@ -220,9 +216,7 @@ class SystemLimitationsScene(Scene):
         
         self.play(*[FadeOut(m) for m in self.mobjects])
 
-    # =========================================================================
-    # Micro-animation 2: Processing Time & Latency
-    # =========================================================================
+    # Phase 2: Processing time and latency
     def _show_latency_animation(self) -> None:
         title = Text("2. Increased Processing Time", font=FONT_MAIN, font_size=28, weight=BOLD, color=HYPERPLANE_COLOR).to_edge(UP, buff=0.4)
         self.play(FadeIn(title, shift=DOWN * 0.15))
@@ -273,7 +267,7 @@ class SystemLimitationsScene(Scene):
                               ).align_to(bg2, LEFT).align_to(bg2, UP)
         self.play(
             Transform(fill2, fill2_30),
-            Rotate(hand, angle=-PI, about_point=watch[0].get_center()),
+            Rotate(hand, angle=-PI * 0.5, about_point=watch[0].get_center()),
             Write(stage_txt),
             run_time=1.0,
         )
@@ -285,7 +279,7 @@ class SystemLimitationsScene(Scene):
                               ).align_to(bg2, LEFT).align_to(bg2, UP)
         self.play(
             Transform(fill2, fill2_60),
-            Rotate(hand, angle=-PI, about_point=watch[0].get_center()),
+            Rotate(hand, angle=-PI * 0.5, about_point=watch[0].get_center()),
             ReplacementTransform(stage_txt, stage2_txt),
             run_time=0.8,
         )
@@ -297,13 +291,16 @@ class SystemLimitationsScene(Scene):
                                ).align_to(bg2, LEFT).align_to(bg2, UP)
         self.play(
             Transform(fill2, fill2_full),
-            Rotate(hand, angle=-PI * 1.5, about_point=watch[0].get_center()),
+            Rotate(hand, angle=-PI * 0.75, about_point=watch[0].get_center()),
             ReplacementTransform(stage2_txt, stage3_txt),
             run_time=1.5,
         )
 
         flash2 = Text("Access Granted!", font=FONT_MAIN, font_size=16, weight=BOLD, color=GENUINE_COLOR).next_to(bg2, DOWN)
         self.play(ReplacementTransform(stage3_txt, flash2))
+
+        # Reset watch hand to 0
+        self.play(Rotate(hand, angle=PI * 1.75, about_point=watch[0].get_center()), run_time=0.2)
 
         caption = Text("Increased Latency due to Multi-modal Sync", font=FONT_MAIN, font_size=18, color=IMPOSTOR_COLOR).to_edge(DOWN, buff=0.8)
         self.play(FadeIn(caption, shift=UP * 0.2))
@@ -312,9 +309,7 @@ class SystemLimitationsScene(Scene):
         self.play(*[FadeOut(m) for m in self.mobjects])
 
 
-    # =========================================================================
-    # Micro-animation 3: Privacy & Honeypot Target
-    # =========================================================================
+    # Phase 3: Privacy risk and honeypot target
     def _show_privacy_animation(self) -> None:
         # Change background tone to indicate threat
         bg_rect = Rectangle(width=config.frame_width, height=config.frame_height, fill_color="#1A0505", fill_opacity=1, stroke_width=0)
@@ -390,9 +385,7 @@ class SystemLimitationsScene(Scene):
 
         self.play(*[FadeOut(m) for m in self.mobjects])
 
-    # =========================================================================
-    # Phase 4: The Wrap-up (Comparison Split Screen)
-    # =========================================================================
+    # Phase 4: Wrap-up comparison
     def _show_wrap_up(self) -> None:
         self.camera.background_color = BG_COLOR
         
@@ -400,7 +393,7 @@ class SystemLimitationsScene(Scene):
         divider = Line(UP * 4, DOWN * 4, color=SLATE_GRAY, stroke_opacity=0.5)
         self.play(Create(divider))
 
-        # --- LEFT: 1D Overlap Vulnerability ---
+        # Left side: 1D unimodal overlap
         left_lbl = Text("1D Unimodal: Highly Vulnerable", font=FONT_MAIN, font_size=18, color=IMPOSTOR_COLOR).to_edge(UL, buff=0.5).shift(RIGHT*1)
         
         # 1D Overlap Gaussians (Simplified)
@@ -412,7 +405,7 @@ class SystemLimitationsScene(Scene):
         self.play(FadeIn(left_lbl), Create(ax_l), Create(curve1), Create(curve2))
         self.play(FadeIn(overlap_area))
         
-        # --- RIGHT: RBF SVM Shield ---
+        # Right side: Multimodal RBF shield
         right_lbl = Text("Multi-modal + SVM RBF: Protective Shield", font=FONT_MAIN, font_size=18, color=GENUINE_COLOR).to_edge(UR, buff=0.5).shift(LEFT*0.5)
         
         # 2D RBF (Simplified rings)
@@ -431,7 +424,7 @@ class SystemLimitationsScene(Scene):
 
         self.wait(1.0)
 
-        # --- Transition: Fade left, expand right ---
+        # Transition: focus on the RBF shield
         self.play(
             FadeOut(left_lbl), FadeOut(ax_l), FadeOut(curve1), FadeOut(curve2), FadeOut(overlap_area), FadeOut(divider),
             right_lbl.animate.move_to(UP*3),
@@ -447,9 +440,7 @@ class SystemLimitationsScene(Scene):
 
         self.play(*[FadeOut(m) for m in self.mobjects], run_time=1.5)
 
-    # =========================================================================
-    # Phase 5: Narrative Callback to Part 0 (XOR Trap Failure)
-    # =========================================================================
+    # Phase 5: Narrative callback to Part 0
     def _show_callback_to_part0(self) -> None:
         self.camera.background_color = BG_COLOR
         
