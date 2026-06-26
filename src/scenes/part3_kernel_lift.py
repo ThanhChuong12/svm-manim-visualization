@@ -59,6 +59,7 @@ DOME_COLOR       = "#00E676"
 LASER_GLOW_COLOR = "#FFFFAA"
 GOLD_COLOR       = "#FFD700"
 FP_COLOR         = "#AABBFF"
+PRIVACY_COLOR    = "#9B59B6"
 
 # RBF / axis parameters
 GAMMA            = 2.0
@@ -609,16 +610,16 @@ class KernelTrickScene(ThreeDScene):
 
     # Phase 6B: Multimodal advantages
     def _phase6b_advantages(self) -> None:
-        """Brief highlight of two key advantages before handing off to Part 4."""
+        """Brief highlight of three key advantages before handing off to Part 4."""
         self.set_camera_orientation(phi=0, theta=-90 * DEGREES)
 
-        title = Text("Why Multimodal Biometrics?", font=FONT, font_size=26,
+        title = Text("Why Multimodal Biometrics & SVM?", font=FONT, font_size=26,
                      weight=BOLD, color=HYPERPLANE_COLOR)
         self.add_fixed_in_frame_mobjects(title)
         title.to_edge(UP, buff=0.4)
         self.play(FadeIn(title, shift=DOWN * 0.1), run_time=0.6)
 
-        # Advantage 1: Shield against spoof attacks
+        # Advantage 1: Shield against spoof attacks (Strong Spoof Resistance)
         shield_hex = RegularPolygon(n=6, color=DOME_COLOR, stroke_width=3,
                                     fill_color=DOME_COLOR, fill_opacity=0.15).scale(0.7)
         shield_lock = VGroup(
@@ -627,15 +628,15 @@ class KernelTrickScene(ThreeDScene):
             Arc(radius=0.18, start_angle=0, angle=PI,
                 color=DOME_COLOR, stroke_width=3).shift(UP * 0.09),
         )
-        shield_icon = VGroup(shield_hex, shield_lock).move_to(LEFT * 3 + UP * 0.5)
+        shield_icon = VGroup(shield_hex, shield_lock).move_to(LEFT * 3.2 + UP * 1.1)
 
-        adv1_label = Text("Blocks Spoof Attacks", font=FONT, font_size=20,
+        adv1_label = Text("1. Strong Spoof Resistance", font=FONT, font_size=19,
                           weight=BOLD, color=DOME_COLOR)
         adv1_desc  = Text(
-            "Spoofing one modality is not enough\nto fool a multi-factor system.",
-            font=FONT, font_size=14, color=SLATE_GRAY,
+            "Mapping to higher dimensions creates a closed boundary,\nblocking sophisticated multi-modal spoofing attacks.",
+            font=FONT, font_size=13, color=SLATE_GRAY,
         )
-        adv1_block = VGroup(adv1_label, adv1_desc).arrange(DOWN, aligned_edge=LEFT, buff=0.12)
+        adv1_block = VGroup(adv1_label, adv1_desc).arrange(DOWN, aligned_edge=LEFT, buff=0.10)
         adv1_block.next_to(shield_icon, RIGHT, buff=0.4)
 
         self.play(
@@ -646,33 +647,52 @@ class KernelTrickScene(ThreeDScene):
         self.play(FadeIn(adv1_desc, shift=UP * 0.1), run_time=0.5)
         self.wait(0.5)
 
-        # Advantage 2: Resilience to worn / damaged biometrics
-        fp_arcs = VGroup(*[
-            Arc(radius=r, start_angle=170 * DEGREES, angle=-340 * DEGREES,
-                color=FP_COLOR, stroke_width=1.8, stroke_opacity=0.7)
-            for r in np.linspace(0.12, 0.45, 5)
-        ])
-        worn_x = VGroup(
-            Line(UL * 0.18, DR * 0.18, color=SPOOF_RED, stroke_width=2.5),
-            Line(UR * 0.18, DL * 0.18, color=SPOOF_RED, stroke_width=2.5),
-        ).move_to(fp_arcs.get_center() + RIGHT * 0.05 + UP * 0.05)
-        fp_icon = VGroup(fp_arcs, worn_x).move_to(LEFT * 3 + DOWN * 0.8)
+        # Advantage 2: Privacy Protection (Privacy-by-Design)
+        eye_body = Ellipse(width=0.7, height=0.4, color=PRIVACY_COLOR, stroke_width=2.2, fill_opacity=0)
+        eye_pupil = Dot(radius=0.08, color=PRIVACY_COLOR)
+        eye_slash = Line(UL * 0.35, DR * 0.35, color=SPOOF_RED, stroke_width=2.5)
+        privacy_icon = VGroup(eye_body, eye_pupil, eye_slash).move_to(LEFT * 3.2 + DOWN * 0.1)
 
-        adv2_label = Text("Handles Worn / Damaged Traits", font=FONT, font_size=20,
-                          weight=BOLD, color=FP_COLOR)
+        adv2_label = Text("2. Privacy-by-Design", font=FONT, font_size=19,
+                          weight=BOLD, color=PRIVACY_COLOR)
         adv2_desc  = Text(
-            "A degraded fingerprint is compensated\nby face or voice score fusion.",
-            font=FONT, font_size=14, color=SLATE_GRAY,
+            "Fuses abstract scalar scores; raw biometric\ntraits remain hidden and protected by default.",
+            font=FONT, font_size=13, color=SLATE_GRAY,
         )
-        adv2_block = VGroup(adv2_label, adv2_desc).arrange(DOWN, aligned_edge=LEFT, buff=0.12)
-        adv2_block.next_to(fp_icon, RIGHT, buff=0.4)
+        adv2_block = VGroup(adv2_label, adv2_desc).arrange(DOWN, aligned_edge=LEFT, buff=0.10)
+        adv2_block.next_to(privacy_icon, RIGHT, buff=0.4)
 
         self.play(
-            GrowFromCenter(fp_icon),
+            GrowFromCenter(privacy_icon),
             FadeIn(adv2_label, shift=LEFT * 0.2),
             run_time=0.8,
         )
         self.play(FadeIn(adv2_desc, shift=UP * 0.1), run_time=0.5)
+        self.wait(0.5)
+
+        # Advantage 3: High Generalization
+        sep_line = Line(LEFT * 0.3 + DOWN * 0.3, RIGHT * 0.3 + UP * 0.3, color=HYPERPLANE_COLOR, stroke_width=2.5)
+        margin_l = DashedLine(LEFT * 0.3 + UP * 0.05, RIGHT * 0.3 + UP * 0.65, color=HYPERPLANE_COLOR, stroke_width=1.2, stroke_opacity=0.6)
+        margin_r = DashedLine(LEFT * 0.3 + DOWN * 0.65, RIGHT * 0.3 + DOWN * 0.05, color=HYPERPLANE_COLOR, stroke_width=1.2, stroke_opacity=0.6)
+        sv_g = Dot(LEFT * 0.15 + UP * 0.25, color=GENUINE_COLOR, radius=0.05)
+        sv_i = Dot(RIGHT * 0.15 + DOWN * 0.25, color=IMPOSTOR_COLOR, radius=0.05)
+        gen_icon = VGroup(sep_line, margin_l, margin_r, sv_g, sv_i).move_to(LEFT * 3.2 + DOWN * 1.3)
+
+        adv3_label = Text("3. High Generalization", font=FONT, font_size=19,
+                          weight=BOLD, color=HYPERPLANE_COLOR)
+        adv3_desc  = Text(
+            "Max-margin optimization generalizes robustly\nto new or noisy biometric samples.",
+            font=FONT, font_size=13, color=SLATE_GRAY,
+        )
+        adv3_block = VGroup(adv3_label, adv3_desc).arrange(DOWN, aligned_edge=LEFT, buff=0.10)
+        adv3_block.next_to(gen_icon, RIGHT, buff=0.4)
+
+        self.play(
+            GrowFromCenter(gen_icon),
+            FadeIn(adv3_label, shift=LEFT * 0.2),
+            run_time=0.8,
+        )
+        self.play(FadeIn(adv3_desc, shift=UP * 0.1), run_time=0.5)
         self.wait(1.0)
 
         outro = Text("Next: Real-world Trade-offs",
@@ -683,7 +703,7 @@ class KernelTrickScene(ThreeDScene):
         )
         outro_group = VGroup(outro_bg, outro)
         self.add_fixed_in_frame_mobjects(outro_group)
-        outro_group.to_edge(DOWN, buff=1.0)
+        outro_group.to_edge(DOWN, buff=0.5)
         self.play(FadeIn(outro_group, shift=UP * 0.12), run_time=0.7)
         self.wait(1.5)
 
